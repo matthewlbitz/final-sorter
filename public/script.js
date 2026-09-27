@@ -94,7 +94,16 @@ function renderStack(){
 }
 function renderBatch(){
   const b=state.batch;
-  if(b.kind==='tape')return renderTapeBatch(b);
+  if (b.kind === 'source') {
+    el('h2', `Sort ${state.sources.find(s=>s.id===b.sourceId)?.label} → columns`);
+  } else if (b.kind === 'unassigned') {
+    el('h2', 'Sort assigned stack → columns');
+  } else {
+    el(
+      'h2',
+      `Column ${b.column} → ${b.mode==='shelf-piles'?'shelf piles':'final shelves'}`
+    );
+  }
   el('h2',b.kind==='source'?`Sort ${state.sources.find(s=>s.id===b.sourceId)?.label} → columns`:`Column ${b.column} → ${b.mode==='shelf-piles'?'shelf piles':'final shelves'}`);
   el('p',b.kind==='source'?'Top CD first · matching shelves are outlined together':b.mode==='shelf-piles'?'Top CD first · place onto labeled shelf piles · tape later':'Top CD first · place in the final shelves');
   const output=el('div');output.className='batch-output';
@@ -108,7 +117,7 @@ function renderBatch(){
       const dest=el('div',undefined,row);dest.className='batch-shelf';
       el('span',b.kind==='source'?'COLUMN':'SHELF',dest).className='eyebrow';
       el('strong',String(i.destination),dest);
-      if(b.kind==='source'&&group.shelf)el('small','Shelf '+group.shelf,dest);
+      if(b.kind === 'source' || b.kind === 'unassigned'&&group.shelf)el('small','Shelf '+group.shelf,dest);
       const detail=el('div',undefined,row);detail.className='batch-detail';
       el('strong',i.album?.title||'Unassigned',detail);
       if(i.album?.artist)el('span',i.album.artist,detail);
@@ -118,7 +127,17 @@ function renderBatch(){
   }
   const next=button(`Placed these ${b.rows.length} CDs — continue (Enter)`,async()=>{
     await action('confirm');
-    const remaining=state.items.some(i=>b.kind==='source'?i.stage==='source'&&i.source_id===b.sourceId:i.stage==='column'&&i.column_no===b.column);
+    const remaining = state.items.some(i => {
+      if (b.kind === 'source') {
+        return i.stage === 'source' && i.source_id === b.sourceId;
+      }
+
+      if (b.kind === 'unassigned') {
+        return i.stage === 'unassigned';
+      }
+
+      return i.stage === 'column' && i.column_no === b.column;
+    });
     if(remaining)await action('batch',{kind:b.kind,sourceId:b.sourceId,column:b.column});
     else {
       const another=b.kind==='source'&&state.sources.find(s=>s.status==='saved'&&s.count);
@@ -155,21 +174,92 @@ function renderTape(album,parent) {
     if((tape&&!tape.hex)||(!tape&&position==='Bottom'))line.classList.add('tape-review');
   }
 }
-function renderUnassigned(){
-  const items=state.items.filter(i=>i.stage==='unassigned');const i=items[0];
-  if(!i){view={type:'home'};return render();}
-  el('h2','Unassigned · '+items.length);el('p','Top CD: '+i.barcode);
-  if(items.length>1)button('Moved to bottom of Unassigned — do later',async()=>{await action('defer',{itemId:i.id});render();},screen,true);
-  if(i.album){el('h3',`${i.album.artist} — ${i.album.title}`);const c=destination(i.album.final_shelf);
-    if(c){el('div','Column '+c).className='destination';el('p','Final shelf '+i.album.final_shelf);renderTape(i.album,screen);button('Placed on top of column '+c,async()=>{await action('route',{itemId:i.id});render();}).focus();}
-    else el('p','This album needs a valid final_shelf in the catalog. Keep this CD in Unassigned.');
+function renderUnassigned() {
+  const items = state.items.filter(i => i.stage === 'unassigned');
+
+  if (!items.length) {
+    view = {type:'home'};
+    return render();
+  }
+
+  const unresolved = items.filter(i => !i.album);
+  const assignedCount = items.length - unresolved.length;
+
+  el('span', 'UNASSIGNED STACK', screen).className = 'eyebrow';
+  el('h2', `${items.length} CDs`);
+
+  el(
+    'p',
+    `${assignedCount} / ${items.length} assigned`
+  );
+
+  if (unresolved.length) {
+    el(
+      'p',
+      `${unresolved.length} still need to be assigned in Shelf Lookup. Keep the physical stack together and in order.`
+    );
+
+    button(
+      'Refresh assignments',
+      async () => {
+        await action('reconcile');
+        render();
+      }
+    ).focus();
+
+    button(
+      'Back',
+      () => go({type:'home'}),
+      screen,
+      true
+    );
+
     return;
   }
-  const f=form(async()=>search());const query=input('Search artist or title','',f);submit('Search',f);const results=el('div');let timer;
-  async function search(){const token=++searchVersion;const albums=await request('/api/search?q='+encodeURIComponent(query.value));if(token!==searchVersion)return;results.replaceChildren();if(!albums.length)el('p','No unassigned albums found. Try artist or title.',results);
-    for(const a of albums){const row=el('div',undefined,results);row.className='saved-stack';el('p',`${a.artist} — ${a.title} · ${a.final_shelf||'No final shelf'}`,row);button('Confirm this album',async()=>{await action('assign',{itemId:i.id,albumId:a.catalog_rowid});render();},row);}}
-  query.oninput=()=>{searchVersion++;clearTimeout(timer);timer=setTimeout(()=>search().catch(e=>message.textContent=e.message),200);};query.focus();
+
+  renderAssignedUnassigned(items);
 }
+
+function renderAssignedUnassigned(items) {
+  el('span', 'UNASSIGNED STACK', screen).className = 'eyebrow';
+  el('h2', `${items.length} CDs assigned`);
+
+  el(
+    'p',
+    'All barcodes are identified. Keep the stack together and sort it into columns.'
+  );
+
+  const preview = el('div');
+  preview.className = 'assigned-preview';
+
+  for (const i of items.slice(0, 5)) {
+    const row = el('div', undefined, preview);
+    row.className = 'assigned-preview-row';
+
+    const dest = destination(i.album?.final_shelf);
+
+    el('strong', i.album?.artist || 'Unknown artist', row);
+    el('span', i.album?.title || 'Untitled', row);
+    el(
+      'small',
+      `${i.barcode} · Column ${dest || '?'} · ${i.album?.final_shelf || '?'}`,
+      row
+    );
+  }
+
+  if (items.length > 5) {
+    el('p', `+ ${items.length - 5} more`, preview);
+  }
+
+  button(
+    'Sort this stack into columns',
+    async () => {
+      await action('batch', {kind:'unassigned'});
+      render();
+    }
+  ).focus();
+}
+
 document.getElementById('home').onclick=()=>run(()=>go({type:'home'}));
 run(async()=>{state=await request('/api/state');render();});
 

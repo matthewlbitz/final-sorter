@@ -37,3 +37,126 @@ form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}form label{flex:1}form
 @media(max-width:760px){.tape-chart{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px}}@media(max-width:380px){.tape-chart{grid-template-columns:1fr}}
 
 .tape-section-card{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px;margin:10px 0;background:var(--panel);border:1px solid var(--line-soft);border-radius:8px}.taping-instruction .tape-line{font-size:22px;margin:8px 0}.taping-instruction .swatch{width:40px;height:26px;flex-basis:40px}.taping-albums{padding-left:28px}.taping-albums li{padding:9px 4px;border-bottom:1px solid var(--line-soft)}@media(max-width:600px){.tape-section-card{align-items:start;flex-direction:column;gap:10px}.taping-instruction .tape-line{font-size:18px}}
+
+
+/* Fast barcode assignment */
+
+.assign-header {
+  margin: 24px 0 18px;
+}
+
+.assign-header h2 {
+  margin: 3px 0;
+  font-size: 28px;
+}
+
+.assign-current {
+  border: 1px solid var(--accent);
+  background: var(--panel);
+  padding: 20px;
+  margin: 18px 0;
+}
+
+.assign-barcode {
+  color: var(--accent-strong);
+  font-size: clamp(28px, 5vw, 48px);
+  font-weight: bold;
+  letter-spacing: .06em;
+  margin-top: 5px;
+}
+
+.assign-search {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+  margin: 22px 0 14px;
+}
+
+.assign-search label {
+  width: 100%;
+}
+
+.assign-search button {
+  margin: 0;
+}
+
+.assign-results {
+  max-width: 850px;
+}
+
+.assign-result {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 20px;
+
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.assign-result-info {
+  min-width: 0;
+}
+
+.assign-result-info strong,
+.assign-result-info span,
+.assign-result-info small {
+  display: block;
+}
+
+.assign-result-info strong {
+  color: var(--accent-strong);
+  font-size: 16px;
+}
+
+.assign-result-info span {
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.assign-result-info small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.assign-button {
+  margin: 0;
+  min-width: 130px;
+}
+
+.assigned-preview {
+  max-width: 700px;
+  margin: 20px 0;
+  border-top: 1px solid var(--line);
+}
+
+.assigned-preview-row {
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.assigned-preview-row strong,
+.assigned-preview-row span,
+.assigned-preview-row small {
+  display: block;
+}
+
+.assigned-preview-row small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+@media(max-width:600px) {
+  .assign-search {
+    grid-template-columns: 1fr;
+  }
+
+  .assign-result {
+    grid-template-columns: 1fr;
+  }
+
+  .assign-button {
+    width: 100%;
+  }
+}

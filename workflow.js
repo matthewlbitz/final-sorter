@@ -117,6 +117,26 @@ function openStore(filename) {
         if(body.kind==='source') {
           const s=source();if(s.status!=='saved')fail('Save this source stack first.');
           items=db.prepare("SELECT * FROM catchall_items WHERE source_id=? AND stage='source' ORDER BY position DESC LIMIT 10").all(s.id);
+        }else if(body.kind==='unassigned') {
+
+            // Do not physically sort until every CD in the
+            // Unassigned stack has been identified.
+            if (
+              db.prepare(
+                "SELECT 1 FROM catchall_items " +
+                "WHERE stage='unassigned' AND album_rowid IS NULL"
+              ).get()
+            ) {
+              fail('Assign every barcode in Unassigned first.');
+            }
+
+            items = db.prepare(
+              "SELECT * FROM catchall_items " +
+              "WHERE stage='unassigned' " +
+              "ORDER BY position DESC LIMIT 10"
+            ).all();
+
+            mode = 'columns';
         } else if(body.kind==='column') {
           if(!Number.isInteger(body.column)||body.column<1||body.column>32)fail('Invalid column.');
           if(db.prepare("SELECT 1 FROM catchall_items WHERE stage='source'").get())fail('Save and sort the source shelves into columns first.');
@@ -141,14 +161,41 @@ function openStore(filename) {
           const dest=shelf(i.album?.final_shelf);
           if(body.kind==='tape'&&dest?.label!==i.shelf_label)fail('A final shelf changed. Correct the catalog before taping this pile.');
           if(body.kind==='column'&&(!dest||dest.column!==i.column_no))fail('A catalog destination changed. Check this column before continuing.');
-          return {...i,destination:body.kind==='source'?(dest?.column||'Unassigned'):dest.label};
+          return {
+            ...i,
+            destination:
+              body.kind === 'source' || body.kind === 'unassigned'
+                ? (dest?.column || 'Unassigned')
+                : dest.label
+          };
         });
         db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:body.kind,mode,sourceId:body.sourceId,column:body.column,shelf:body.shelf,rows}));
       } else if(body.type==='confirm') {
         if(!b)fail('No batch to confirm.');
         for(const i of b.rows) {
           if((b.kind==='column'||b.kind==='tape') && shelf(album(i.album_rowid)?.final_shelf)?.label!==i.destination)fail('A final shelf changed while this batch was open. Restore its catalog destination before confirming.');
-          if(b.kind==='source')db.prepare('UPDATE catchall_items SET stage=?,column_no=?,position=? WHERE id=?').run(i.destination==='Unassigned'?'unassigned':'column',i.destination==='Unassigned'?null:i.destination,seq(),i.id);
+          if(b.kind === 'source') {
+            db.prepare(
+              'UPDATE catchall_items SET stage=?,column_no=?,position=? WHERE id=?'
+            ).run(
+              i.destination === 'Unassigned' ? 'unassigned' : 'column',
+              i.destination === 'Unassigned' ? null : i.destination,
+              seq(),
+              i.id
+            );
+          }
+
+          else if(b.kind === 'unassigned') {
+            db.prepare(
+              "UPDATE catchall_items " +
+              "SET stage='column',column_no=?,position=? " +
+              "WHERE id=?"
+            ).run(
+              i.destination,
+              seq(),
+              i.id
+            );
+          }
           else if(b.kind==='column'&&b.mode==='shelf-piles')db.prepare("UPDATE catchall_items SET stage='shelf',shelf_label=?,position=? WHERE id=?").run(i.destination,seq(),i.id);
           else {
             if(b.kind==='tape'&&tapeKey(album(i.album_rowid))!==tapeKey(i.album))fail('Tape genres changed. Restore the displayed genres before confirming this section.');
@@ -158,6 +205,49 @@ function openStore(filename) {
         }
         if(b.kind==='source'&&!db.prepare("SELECT 1 FROM catchall_items WHERE source_id=? AND stage='source'").get(b.sourceId))db.prepare("UPDATE catchall_sources SET status='complete' WHERE id=?").run(b.sourceId);
         db.prepare('UPDATE catchall_meta SET batch=NULL').run();
+      } else if (body.type === 'reconcile') {
+        const unresolved = db.prepare(`
+          SELECT id, barcode
+          FROM catchall_items
+          WHERE stage = 'unassigned'
+            AND album_rowid IS NULL
+          ORDER BY position DESC
+        `).all();
+
+        let matched = 0;
+
+        for (const item of unresolved) {
+          const matches = db.prepare(`
+            SELECT rowid AS rid
+            FROM rainbow_albums
+            WHERE TRIM(barcode) = TRIM(?)
+          `).all(item.barcode);
+
+          if (matches.length > 1) {
+            fail(`Barcode ${item.barcode} matches multiple albums.`);
+          }
+
+          if (matches.length === 1) {
+            const alreadyUsed = db.prepare(`
+              SELECT 1
+              FROM catchall_items
+              WHERE album_rowid = ?
+                AND id <> ?
+            `).get(matches[0].rid, item.id);
+
+            if (alreadyUsed) {
+              fail(`Album for barcode ${item.barcode} is already in another stack.`);
+            }
+
+            db.prepare(`
+              UPDATE catchall_items
+              SET album_rowid = ?
+              WHERE id = ?
+            `).run(matches[0].rid, item.id);
+
+            matched++;
+          }
+        } 
       } else if(body.type==='assign') {
         const i=db.prepare("SELECT * FROM catchall_items WHERE id=? AND stage='unassigned'").get(body.itemId)||fail('CD is no longer unassigned.');
         if(i.album_rowid)fail('This barcode already has an album. Correct its final shelf in the catalog.');
