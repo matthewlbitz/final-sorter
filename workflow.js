@@ -190,8 +190,43 @@ function openStore(filename) {
 
       groups.set(location.key, g);
     }
-    return {revision:m.revision,targetColumn,start,end,remaining,unavailable,sources: sources.map(s=>({...s,count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length})),items,
-      recommendations:[...groups.values()].sort((a,b)=>b.highest-a.highest||b.count-a.count||a.label.localeCompare(b.label)),batch:m.batch?JSON.parse(m.batch):null};
+    return {
+      revision:m.revision,
+      targetColumn,
+      start,
+      end,
+      remaining,
+      unavailable,
+      sources: sources.map(s=>({
+        ...s,
+        count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length
+      })),
+      items,
+
+      recommendations: [...groups.values()].sort((a, b) => {
+        const priority = location => {
+          if (location.type === 'shelf') return 1;
+          if (location.type === 'column') return 2;
+
+          if (
+            location.key === 'section-19' ||
+            location.key === 'section-21-23'
+          ) return 3;
+
+          if (location.key === 'unassigned-29-32') return 4;
+
+          return 5;
+        };
+
+        return (
+          priority(a) - priority(b) ||
+          b.count - a.count ||
+          a.label.localeCompare(b.label, undefined, {numeric:true})
+        );
+      }),
+
+      batch:m.batch?JSON.parse(m.batch):null
+    };
   }
   function action(body) {
     let resetBackup;
