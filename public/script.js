@@ -12,6 +12,28 @@ function form(fn,parent=screen){const f=el('form',undefined,parent);f.onsubmit=e
 function submit(text,f){const b=el('button',text,f);b.type='submit';return b;}
 function go(v){view=v;render();}
 function destination(value){const m=String(value||'').match(/^(\d+)[A-Z]$/);return m?+m[1]:null;}
+function startRecommendation(rec) {
+  // Exact shelf recommendations can start immediately.
+  if (rec.type === 'shelf') {
+    return run(async () => {
+      await action('source', {
+        label: rec.label.replace(/^Shelf\s+/i, '')
+      });
+
+      go({
+        type: 'scan',
+        id: state.sources[0].id
+      });
+    });
+  }
+
+  // Columns / jumbled sections / 29–32 need the user
+  // to tell us which actual shelf they're physically pulling.
+  go({
+    type: 'pull',
+    recommendation: rec
+  });
+}
 function render(){
   searchVersion++;screen.replaceChildren();document.getElementById('home').hidden=!!state.batch||view.type==='home';
   if(state.batch)return renderBatch();
@@ -20,6 +42,7 @@ function render(){
   if(view.type==='shelf')return renderShelf();
   if(view.type==='source'||view.type==='column')return renderStack();
   if(view.type==='unassigned')return renderUnassigned();
+  if(view.type==='pull')return renderPull(0);
   const f=form(async()=>{await action('target',{column:Number(select.value)});render();});f.className='target-picker';
   const targetLabel=el('label','Target column',f), select=el('select',undefined,targetLabel);
   for(let c=32;c>=1;c--){const option=el('option','Column '+c,select);option.value=c;option.selected=c===state.targetColumn;}
@@ -39,7 +62,23 @@ function render(){
   const rec=state.recommendations[0];
   const next=el((saved.length||columnList.length||shelfList.length)&&!view.intake?'details':'section');next.className='next';
   if(next.tagName==='DETAILS')el('summary','Scan another shelf',next);
-  if(rec){el('h2','Pull next: '+rec.label,next);el('p',`${rec.count} expected in column ${state.targetColumn}`,next);const existing=state.sources.find(s=>s.label===rec.label&&s.status==='scanning');button((existing?'Resume ':'Scan ')+rec.label,async()=>{if(!existing)await action('source',{label:rec.label});go({type:'scan',id:existing?.id||state.sources[0].id});},next);}
+    if (rec) {
+    el('h2', 'Pull next: ' + rec.label, next);
+
+    el(
+      'p',
+      `${rec.count} expected in column ${state.targetColumn}`,
+      next
+    );
+
+    button(
+      rec.type === 'shelf'
+        ? `Scan ${rec.label}`
+        : `Choose shelf in ${rec.label}`,
+      () => startRecommendation(rec),
+      next
+    );
+  }
   else {el('h2',state.remaining?'No new source shelves for this column':'Column complete',next);el('p',state.remaining?'Finish saved stacks or check the remaining catalog locations.':'Every catalog album in this column has reached its final shelf.',next);}
   el('p',`${state.remaining} remaining in column ${state.targetColumn}${state.unavailable?' · '+state.unavailable+' not found on processed shelves or missing a source location':''}`,next);
   const open=state.sources.filter(s=>s.status!=='complete');
@@ -53,6 +92,97 @@ function render(){
   const manual=form(async()=>{await action('source',{label:label.value});go({type:'scan',id:state.sources[0].id});},d);const label=input('Source shelf','',manual);submit('Scan shelf',manual);
   if(state.recommendations.length>1)el('p','Next: '+state.recommendations.slice(1,6).map(r=>`${r.label} (${r.count})`).join(' · '),d);
 }
+
+function renderPull() {
+  const rec = view.recommendation;
+
+  if (!rec) {
+    go({type:'home'});
+    return;
+  }
+
+  el('span', 'PULL LOCATION', screen).className = 'eyebrow';
+  el('h2', rec.label);
+
+  el(
+    'p',
+    `${rec.count} expected for target column ${state.targetColumn}.`
+  );
+
+  if (rec.type === 'column') {
+    el(
+      'p',
+      `Choose the actual shelf you're pulling from in ${rec.label}.`
+    );
+  } else {
+    el(
+      'p',
+      'This area is not shelf-accurate. Choose the actual shelf you physically pull.'
+    );
+  }
+
+  const f = form(async () => {
+    const label = shelfInput.value.trim().toUpperCase();
+
+    if (!/^\d{1,2}[A-Z]$/.test(label)) {
+      throw new Error('Enter a shelf like 19A or 22F.');
+    }
+
+    const column = Number(label.match(/^\d+/)[0]);
+
+    // Make sure the shelf actually belongs to the recommended area.
+    if (rec.key === 'section-19' && column !== 19) {
+      throw new Error('Choose a shelf in Column 19.');
+    }
+
+    if (
+      rec.key === 'section-21-23' &&
+      (column < 21 || column > 23)
+    ) {
+      throw new Error('Choose a shelf in Columns 21–23.');
+    }
+
+    if (
+      rec.key === 'unassigned-29-32' &&
+      (column < 29 || column > 32)
+    ) {
+      throw new Error('Choose a shelf in Columns 29–32.');
+    }
+
+    if (
+      rec.type === 'column' &&
+      rec.key.startsWith('column-')
+    ) {
+      const expected = Number(rec.key.replace('column-', ''));
+
+      if (column !== expected) {
+        throw new Error(`Choose a shelf in Column ${expected}.`);
+      }
+    }
+
+    await action('source', {label});
+
+    go({
+      type: 'scan',
+      id: state.sources[0].id
+    });
+  });
+
+  const shelfInput = input('Actual shelf', '', f);
+  shelfInput.placeholder = 'e.g. 19A';
+
+  submit('Start scanning', f);
+
+  button(
+    'Back',
+    () => go({type:'home'}),
+    screen,
+    true
+  );
+
+  shelfInput.focus();
+}
+
 function renderScan(){
   const s=state.sources.find(s=>s.id===view.id);if(!s||s.status!=='scanning'){view={type:'home'};return render();}
   el('h2','Scanning '+s.label);el('p','Place each scanned CD on top. Keep the stack in order.');

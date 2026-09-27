@@ -6,6 +6,76 @@ const shelf = value => {
   const m = String(value || '').trim().toUpperCase().match(/^(\d{1,2})([A-Z])$/);
   return m && +m[1] >= 1 && +m[1] <= 32 ? {label: `${+m[1]}${m[2]}`, column: +m[1], rank: +m[1]*26 + m[2].charCodeAt(0)-65} : null;
 };
+
+function estimatedLocation(album) {
+  // Albums without an assigned barcode are physically in 29–32.
+  if (!String(album.barcode || '').trim()) {
+    return {
+      key: 'unassigned-29-32',
+      label: 'Columns 29–32',
+      type: 'section'
+    };
+  }
+
+  const old = shelf(album.new_shelf_label);
+
+  if (!old) {
+    return {
+      key: 'unknown',
+      label: 'Unknown location',
+      type: 'unknown'
+    };
+  }
+
+  const c = old.column;
+
+  // Columns 1–8: correct column, but not necessarily correct shelf.
+  if (c >= 1 && c <= 8) {
+    return {
+      key: `column-${c}`,
+      label: `Column ${c}`,
+      type: 'column'
+    };
+  }
+
+  // Column 19 is jumbled.
+  if (c === 19) {
+    return {
+      key: 'section-19',
+      label: 'Column 19 (jumbled)',
+      type: 'section'
+    };
+  }
+
+  // Columns 21–23 are jumbled together.
+  if (c >= 21 && c <= 23) {
+    return {
+      key: 'section-21-23',
+      label: 'Columns 21–23 (jumbled)',
+      type: 'section'
+    };
+  }
+
+  // These areas are accurate down to the individual shelf.
+  if (
+    (c >= 9 && c <= 18) ||
+    c === 20 ||
+    (c >= 24 && c <= 28)
+  ) {
+    return {
+      key: `shelf-${old.label}`,
+      label: `Shelf ${old.label}`,
+      type: 'shelf'
+    };
+  }
+
+  return {
+    key: `column-${c}`,
+    label: `Column ${c}`,
+    type: 'column'
+  };
+}
+
 function openStore(filename) {
   if (!fs.existsSync(filename)) throw new Error('Catalog database not found: '+filename);
   const db = new Database(filename);
@@ -53,18 +123,72 @@ function openStore(filename) {
     const targetColumn=shelf(m.range_end)?.column||bounds.at(-1)?.column||32;
     const start=`${targetColumn}A`, end=`${targetColumn}Z`;
     const sources=db.prepare('SELECT * FROM catchall_sources ORDER BY id DESC').all();
-    const seen=new Set(items.filter(i=>i.album_rowid).map(i=>i.album_rowid));
-    const used=new Set(sources.filter(s=>s.status!=='scanning').map(s=>s.label));
+    const active = new Set(
+      items
+        .filter(i =>
+          i.album_rowid &&
+          i.stage !== 'sorted'
+        )
+        .map(i => i.album_rowid)
+    );
+    const used=new Set();
     const sorted=new Set(items.filter(i=>i.stage==='sorted').map(i=>i.album_rowid));
-    const groups=new Map(); let remaining=0, unavailable=0;
-    for(const a of db.prepare('SELECT rowid AS rid,final_shelf,new_shelf_label FROM rainbow_albums').all()) {
-      const f=shelf(a.final_shelf);if(!f||f.column!==targetColumn)continue;
-      if(sorted.has(a.rid))continue;
+    const groups = new Map();
+    let remaining = 0;
+    let unavailable = 0;
+
+    for (const a of db.prepare(`
+      SELECT
+        rowid AS rid,
+        final_shelf,
+        new_shelf_label,
+        barcode
+      FROM rainbow_albums
+    `).all()) {
+
+      const final = shelf(a.final_shelf);
+
+      // Only albums ultimately belonging in our target column.
+      if (!final || final.column !== targetColumn) continue;
+
+      // Already physically placed in its final location.
+      if (sorted.has(a.rid)) continue;
+
       remaining++;
-      if(seen.has(a.rid))continue;
-      const label=String(a.new_shelf_label||'').trim().toUpperCase();
-      if(!label||used.has(label)){unavailable++;continue;}
-      const g=groups.get(label)||{label,count:0,highest:0};g.count++;g.highest=Math.max(g.highest,f.rank);groups.set(label,g);
+
+      // Final Sorter has already encountered this album.
+      //
+      // It might currently be:
+      //   - in a scanned source stack
+      //   - in a column pile
+      //   - in an unassigned pile
+      //   - in a target shelf pile
+      //
+      // In all of those cases, its old new_shelf_label is no longer
+      // useful for telling us where to pull it from.
+      if (active.has(a.rid)) continue;
+
+      // We have never encountered this CD, so estimate where it
+      // currently lives based on the station's starting state.
+      const location = estimatedLocation(a);
+
+      if (location.type === 'unknown') {
+        unavailable++;
+        continue;
+      }
+
+      const g = groups.get(location.key) || {
+        key: location.key,
+        label: location.label,
+        type: location.type,
+        count: 0,
+        highest: 0
+      };
+
+      g.count++;
+      g.highest = Math.max(g.highest, final.rank);
+
+      groups.set(location.key, g);
     }
     return {revision:m.revision,targetColumn,start,end,remaining,unavailable,sources: sources.map(s=>({...s,count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length})),items,
       recommendations:[...groups.values()].sort((a,b)=>b.highest-a.highest||b.count-a.count||a.label.localeCompare(b.label)),batch:m.batch?JSON.parse(m.batch):null};
