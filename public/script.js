@@ -104,8 +104,14 @@ function renderBatch(){
       `Column ${b.column} → ${b.mode==='shelf-piles'?'shelf piles':'final shelves'}`
     );
   }
-  el('h2',b.kind==='source'?`Sort ${state.sources.find(s=>s.id===b.sourceId)?.label} → columns`:`Column ${b.column} → ${b.mode==='shelf-piles'?'shelf piles':'final shelves'}`);
-  el('p',b.kind==='source'?'Top CD first · matching shelves are outlined together':b.mode==='shelf-piles'?'Top CD first · place onto labeled shelf piles · tape later':'Top CD first · place in the final shelves');
+  el(
+    'p',
+    b.kind === 'source' || b.kind === 'unassigned'
+      ? 'Top CD first · place each CD on top of its destination column pile'
+      : b.mode === 'shelf-piles'
+        ? 'Top CD first · place onto labeled shelf piles · tape later'
+        : 'Top CD first · place in the final shelves'
+  );
   const output=el('div');output.className='batch-output';
   for(const group of SortingGuide.shelfRuns(b.rows)) {
     const repeated=group.count>1;
