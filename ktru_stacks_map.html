@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KTRU // STACKS MAP</title>
+
+<style>
+:root{
+  --ink:#0a0a0a;
+  --paper:#f7f6f1;
+  --white:#fff;
+  --rule:#0a0a0a;
+  --soft:#deddd6;
+}
+*{box-sizing:border-box}
+html{background:var(--paper)}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  letter-spacing:.01em;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:18px}
+.top{
+  background:var(--ink);
+  color:var(--white);
+  border:3px solid var(--ink);
+  padding:15px 17px 13px;
+  margin-bottom:10px;
+}
+.brand{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  font-weight:900;
+  font-size:30px;
+  line-height:1;
+  letter-spacing:-.04em;
+}
+.ktru{
+  border:3px solid #fff;
+  padding:4px 7px 3px;
+  letter-spacing:-.07em;
+}
+.slash{font-weight:400;opacity:.65}
+.meta{
+  margin-top:10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11px;
+  letter-spacing:.13em;
+  color:#d8d8d8;
+}
+.controls{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:7px;
+  margin:0 0 10px;
+}
+input,button{
+  border:2px solid var(--ink);
+  border-radius:0;
+  font:700 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.06em;
+}
+input{
+  min-width:0;
+  padding:10px 11px;
+  background:#fff;
+  color:#000;
+  outline:none;
+}
+input:focus{box-shadow:inset 0 -3px 0 #000}
+button{
+  padding:10px 16px;
+  background:#000;
+  color:#fff;
+  cursor:pointer;
+}
+button:hover{background:#fff;color:#000}
+.legend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:0;
+  border-left:2px solid #000;
+  border-top:2px solid #000;
+  margin:0 0 12px;
+}
+.legend-item{
+  flex:1 1 180px;
+  display:flex;
+  align-items:stretch;
+  gap:0;
+  background:#fff;
+  border-right:2px solid #000;
+  border-bottom:2px solid #000;
+  min-height:42px;
+}
+.swatch{
+  width:13px;
+  height:auto;
+  border:0;
+  border-radius:0;
+  flex:none;
+}
+.legend-item>span:last-child{
+  padding:6px 8px 5px;
+  line-height:1.05;
+}
+.legend-item b{
+  display:block;
+  font-size:12px;
+  text-transform:uppercase;
+}
+small{
+  display:block;
+  color:#555;
+  margin-top:3px;
+  font:10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  text-transform:uppercase;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.genre-card{
+  background:#fff;
+  border:2px solid #000;
+  border-radius:0;
+  overflow:hidden;
+}
+.genre-card header{
+  padding:0;
+  display:grid;
+  grid-template-columns:1fr auto;
+  align-items:stretch;
+  gap:0;
+  border-bottom:2px solid #000;
+}
+.genre-card header>div:first-child{
+  padding:10px 11px 9px;
+  background:rgba(255,255,255,.84);
+  color:#000;
+}
+.genre-card h2{
+  font-size:18px;
+  line-height:1;
+  margin:0;
+  text-transform:uppercase;
+  letter-spacing:-.025em;
+}
+.range{
+  display:inline-block;
+  margin-top:6px;
+  padding:3px 5px;
+  background:#000;
+  color:#fff;
+  font:800 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.04em;
+}
+.tape{
+  min-width:92px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px 10px;
+  border-left:2px solid #000;
+  font:900 11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  text-transform:uppercase;
+  text-align:center;
+  background:inherit;
+  color:inherit;
+}
+.body{padding:0}
+table{width:100%;border-collapse:collapse}
+th,td{
+  padding:6px 8px;
+  border-bottom:1px solid #c9c8c1;
+  text-align:left;
+  vertical-align:top;
+  font-size:12px;
+}
+tbody tr:last-child td{border-bottom:0}
+th{
+  background:#ecebe5;
+  color:#333;
+  font:800 9px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  border-bottom:2px solid #000;
+}
+td:nth-child(2){
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+td:last-child,th:last-child{text-align:right;white-space:nowrap}
+tbody tr:hover{background:#f0efe9}
+details{
+  margin-top:12px;
+  background:#fff;
+  border:2px solid #000;
+  border-radius:0;
+  padding:0;
+}
+summary{
+  cursor:pointer;
+  font:900 14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.08em;
+  padding:10px 12px;
+  background:#000;
+  color:#fff;
+}
+.shelf-table{margin:0}
+.note{
+  margin:0;
+  padding:8px 12px;
+  border-bottom:1px solid #aaa;
+  color:#555;
+  font:10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.05em;
+}
+.hidden{display:none!important}
+@media(max-width:760px){
+  .wrap{padding:8px}
+  .brand{font-size:23px}
+  .grid{grid-template-columns:1fr}
+  .legend-item{flex-basis:50%}
+  th,td{padding:5px 6px}
+}
+@media print{
+  @page{margin:.35in}
+  body,html{background:#fff}
+  .wrap{max-width:none;padding:0}
+  .controls{display:none}
+  .top{padding:9px 11px}
+  .brand{font-size:22px}
+  .legend{margin-bottom:7px}
+  .legend-item{min-height:31px}
+  .genre-card{break-inside:avoid}
+  details{display:none}
+}
+</style>
+
+</head>
+<body><main class="wrap">
+<div class="top"><div class="brand"><span class="ktru">KTRU</span><span class="slash">//</span><span>STACKS MAP</span></div><div class="meta">FINAL SHELVES · GENRE / SUBGENRE / TAPE</div></div>
+<div class="controls"><input id="search" placeholder="SEARCH SHELF / GENRE / COLOR" autofocus><button onclick="window.print()">PRINT</button></div>
+<div class="legend"><div class="legend-item"><span class="swatch" style="background:#d32f2f"></span><span><b>Hip Hop</b><small>Red</small></span></div><div class="legend-item"><span class="swatch" style="background:#f57c00"></span><span><b>Jazz</b><small>Orange</small></span></div><div class="legend-item"><span class="swatch" style="background:#f9d835"></span><span><b>Rock</b><small>Yellow</small></span></div><div class="legend-item"><span class="swatch" style="background:#9ccc65"></span><span><b>Classical/Stage&amp;Screen</b><small>Light Green</small></span></div><div class="legend-item"><span class="swatch" style="background:#06402B"></span><span><b>Folk &amp; Country</b><small>Dark Green</small></span></div><div class="legend-item"><span class="swatch" style="background:#81d4fa"></span><span><b>Pop</b><small>Baby Blue</small></span></div><div class="legend-item"><span class="swatch" style="background:#1976d2"></span><span><b>Funk / Soul</b><small>Medium Blue</small></span></div><div class="legend-item"><span class="swatch" style="background:#0d47a1"></span><span><b>Blues</b><small>Dark Blue</small></span></div><div class="legend-item"><span class="swatch" style="background:#7b1fa2"></span><span><b>World</b><small>Purple</small></span></div><div class="legend-item"><span class="swatch" style="background:#ec407a"></span><span><b>Electronic</b><small>Pink</small></span></div><div class="legend-item"><span class="swatch" style="background:#795548"></span><span><b>Reggae</b><small>Brown</small></span></div><div class="legend-item"><span class="swatch" style="background:#212121"></span><span><b>Latin</b><small>Black</small></span></div><div class="legend-item"><span class="swatch" style="background:#757575"></span><span><b>Brass &amp; Military</b><small>Grey</small></span></div><div class="legend-item"><span class="swatch" style="background:#fff"></span><span><b>Non-Music</b><small>White</small></span></div><div class="legend-item"><span class="swatch" style="background:#d4af37"></span><span><b>Children&#x27;s</b><small>Gold</small></span></div></div>
+<div id="cards" class="grid">
+    <section class="genre-card">
+      <header style="background:#d32f2f;color:#fff">
+        <div><h2>Hip Hop</h2><div class="range">1A–1K</div></div>
+        <div class="tape">Red</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>1A–1G</strong></td><td>180</td></tr><tr><td>Jazz</td><td><strong>1G–1H</strong></td><td>22</td></tr><tr><td>Rock</td><td><strong>1H–1I</strong></td><td>23</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>1I</strong></td><td>1</td></tr><tr><td>Folk &amp; Country</td><td><strong>1I</strong></td><td>2</td></tr><tr><td>Pop</td><td><strong>1I–1J</strong></td><td>7</td></tr><tr><td>World</td><td><strong>1J</strong></td><td>2</td></tr><tr><td>Funk / Soul</td><td><strong>1J</strong></td><td>21</td></tr><tr><td>Reggae</td><td><strong>1J–1K</strong></td><td>9</td></tr><tr><td>Latin</td><td><strong>1K</strong></td><td>3</td></tr><tr><td>Non-Music</td><td><strong>1K</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#f57c00;color:#fff">
+        <div><h2>Jazz</h2><div class="range">1L–10B</div></div>
+        <div class="tape">Orange</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>1L–8H</strong></td><td>2,737</td></tr><tr><td>Rock</td><td><strong>8H–9B</strong></td><td>351</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>9B–9D</strong></td><td>87</td></tr><tr><td>Folk &amp; Country</td><td><strong>9D–9G</strong></td><td>102</td></tr><tr><td>Pop</td><td><strong>9G–9H</strong></td><td>51</td></tr><tr><td>Funk / Soul</td><td><strong>9H–9J</strong></td><td>74</td></tr><tr><td>Blues</td><td><strong>9J–9M</strong></td><td>91</td></tr><tr><td>World</td><td><strong>9M–9N</strong></td><td>36</td></tr><tr><td>Latin</td><td><strong>9N–10A</strong></td><td>138</td></tr><tr><td>Reggae</td><td><strong>9N</strong></td><td>20</td></tr><tr><td>Non-Music</td><td><strong>10A–10B</strong></td><td>18</td></tr><tr><td>Brass &amp; Military</td><td><strong>10A</strong></td><td>2</td></tr><tr><td>Children&#x27;s</td><td><strong>10B</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#f9d835;color:#111">
+        <div><h2>Rock</h2><div class="range">10C–22B</div></div>
+        <div class="tape">Yellow</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>10C–19M</strong></td><td>5,150</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>19M–19N</strong></td><td>35</td></tr><tr><td>Folk &amp; Country</td><td><strong>19N–21A</strong></td><td>566</td></tr><tr><td>Pop</td><td><strong>21A–21J</strong></td><td>528</td></tr><tr><td>Funk / Soul</td><td><strong>21J–21K</strong></td><td>83</td></tr><tr><td>Blues</td><td><strong>21K–21O</strong></td><td>226</td></tr><tr><td>World</td><td><strong>21O</strong></td><td>8</td></tr><tr><td>Reggae</td><td><strong>21O–22A</strong></td><td>66</td></tr><tr><td>Latin</td><td><strong>22A</strong></td><td>40</td></tr><tr><td>Non-Music</td><td><strong>22A–22B</strong></td><td>21</td></tr><tr><td>Brass &amp; Military</td><td><strong>22A</strong></td><td>3</td></tr><tr><td>Children&#x27;s</td><td><strong>22B</strong></td><td>8</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#9ccc65;color:#111">
+        <div><h2>Classical/Stage&amp;Screen</h2><div class="range">22C–22I</div></div>
+        <div class="tape">Light Green</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>22C–22H</strong></td><td>326</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>22C–22D, 22F–22G</strong></td><td>6</td></tr><tr><td>Jazz</td><td><strong>22H</strong></td><td>2</td></tr><tr><td>Folk &amp; Country</td><td><strong>22H–22I</strong></td><td>25</td></tr><tr><td>World</td><td><strong>22I</strong></td><td>8</td></tr><tr><td>Electronic</td><td><strong>22I</strong></td><td>7</td></tr><tr><td>Non-Music</td><td><strong>22I</strong></td><td>1</td></tr><tr><td>Children&#x27;s</td><td><strong>22I</strong></td><td>3</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#06402B;color:#111">
+        <div><h2>Folk &amp; Country</h2><div class="range">22J–24J</div></div>
+        <div class="tape">Dark Green</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>22J–24J</strong></td><td>1,876</td></tr><tr><td>Jazz</td><td><strong>24J</strong></td><td>2</td></tr><tr><td>Rock</td><td><strong>24J</strong></td><td>8</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>24J</strong></td><td>14</td></tr><tr><td>Funk / Soul</td><td><strong>24J</strong></td><td>1</td></tr><tr><td>Pop</td><td><strong>24J</strong></td><td>1</td></tr><tr><td>Latin</td><td><strong>24J</strong></td><td>1</td></tr><tr><td>Reggae</td><td><strong>24J</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#81d4fa;color:#111">
+        <div><h2>Pop</h2><div class="range">24K–24N</div></div>
+        <div class="tape">Baby Blue</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>24K–24L</strong></td><td>94</td></tr><tr><td>Rock</td><td><strong>24L</strong></td><td>15</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>24L</strong></td><td>5</td></tr><tr><td>Folk &amp; Country</td><td><strong>24L–24N</strong></td><td>69</td></tr><tr><td>World</td><td><strong>24N</strong></td><td>21</td></tr><tr><td>Children&#x27;s</td><td><strong>24N</strong></td><td>11</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#1976d2;color:#fff">
+        <div><h2>Funk / Soul</h2><div class="range">24O–25B</div></div>
+        <div class="tape">Medium Blue</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>24O–24P</strong></td><td>115</td></tr><tr><td>Hip Hop</td><td><strong>24P–25A</strong></td><td>2</td></tr><tr><td>Jazz</td><td><strong>25A</strong></td><td>1</td></tr><tr><td>Rock</td><td><strong>25A</strong></td><td>1</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>25A</strong></td><td>4</td></tr><tr><td>Folk &amp; Country</td><td><strong>25A</strong></td><td>8</td></tr><tr><td>Blues</td><td><strong>25A–25B</strong></td><td>52</td></tr><tr><td>Pop</td><td><strong>25A</strong></td><td>8</td></tr><tr><td>World</td><td><strong>25B</strong></td><td>15</td></tr><tr><td>Reggae</td><td><strong>25B</strong></td><td>1</td></tr><tr><td>Non-Music</td><td><strong>25B</strong></td><td>2</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#0d47a1;color:#fff">
+        <div><h2>Blues</h2><div class="range">25C–26A</div></div>
+        <div class="tape">Dark Blue</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>25C–25N</strong></td><td>677</td></tr><tr><td>Rock</td><td><strong>25N</strong></td><td>6</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>25N</strong></td><td>2</td></tr><tr><td>Folk &amp; Country</td><td><strong>25N–26A</strong></td><td>155</td></tr><tr><td>World</td><td><strong>26A</strong></td><td>6</td></tr><tr><td>Funk / Soul</td><td><strong>26A</strong></td><td>1</td></tr><tr><td>Pop</td><td><strong>26A</strong></td><td>2</td></tr><tr><td>Electronic</td><td><strong>26A</strong></td><td>1</td></tr><tr><td>Non-Music</td><td><strong>26A</strong></td><td>3</td></tr><tr><td>Brass &amp; Military</td><td><strong>26A</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#7b1fa2;color:#fff">
+        <div><h2>World</h2><div class="range">26B–26E</div></div>
+        <div class="tape">Purple</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>26B–26E</strong></td><td>252</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>26E</strong></td><td>5</td></tr><tr><td>Funk / Soul</td><td><strong>26E</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#ec407a;color:#fff">
+        <div><h2>Electronic</h2><div class="range">26F–31K</div></div>
+        <div class="tape">Pink</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>26F–27N</strong></td><td>1,678</td></tr><tr><td>Hip Hop</td><td><strong>27N–28D</strong></td><td>243</td></tr><tr><td>Jazz</td><td><strong>28D–29A</strong></td><td>331</td></tr><tr><td>Rock</td><td><strong>29A–31B</strong></td><td>1,105</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>31B–31D</strong></td><td>82</td></tr><tr><td>Folk &amp; Country</td><td><strong>31D–31E</strong></td><td>52</td></tr><tr><td>Pop</td><td><strong>31E–31H</strong></td><td>127</td></tr><tr><td>World</td><td><strong>31H–31I</strong></td><td>12</td></tr><tr><td>Funk / Soul</td><td><strong>31H</strong></td><td>33</td></tr><tr><td>Blues</td><td><strong>31H</strong></td><td>7</td></tr><tr><td>Latin</td><td><strong>31I–31J</strong></td><td>27</td></tr><tr><td>Reggae</td><td><strong>31I</strong></td><td>35</td></tr><tr><td>Non-Music</td><td><strong>31J–31K</strong></td><td>49</td></tr><tr><td>Children&#x27;s</td><td><strong>31K</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#795548;color:#fff">
+        <div><h2>Reggae</h2><div class="range">31L–32E</div></div>
+        <div class="tape">Brown</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>31L–32D</strong></td><td>412</td></tr><tr><td>Rock</td><td><strong>32D</strong></td><td>4</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>32D</strong></td><td>3</td></tr><tr><td>Folk &amp; Country</td><td><strong>32D</strong></td><td>6</td></tr><tr><td>Pop</td><td><strong>32D–32E</strong></td><td>5</td></tr><tr><td>World</td><td><strong>32E</strong></td><td>6</td></tr><tr><td>Funk / Soul</td><td><strong>32E</strong></td><td>9</td></tr><tr><td>Blues</td><td><strong>32E</strong></td><td>4</td></tr><tr><td>Latin</td><td><strong>32E</strong></td><td>9</td></tr><tr><td>Non-Music</td><td><strong>32E</strong></td><td>2</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#212121;color:#fff">
+        <div><h2>Latin</h2><div class="range">32F–32H</div></div>
+        <div class="tape">Black</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>32F–32G</strong></td><td>92</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>32G</strong></td><td>4</td></tr><tr><td>Folk &amp; Country</td><td><strong>32G</strong></td><td>44</td></tr><tr><td>Pop</td><td><strong>32G–32H</strong></td><td>5</td></tr><tr><td>World</td><td><strong>32H</strong></td><td>50</td></tr><tr><td>Funk / Soul</td><td><strong>32H</strong></td><td>15</td></tr><tr><td>Blues</td><td><strong>32H</strong></td><td>1</td></tr><tr><td>Children&#x27;s</td><td><strong>32H</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#757575;color:#fff">
+        <div><h2>Brass &amp; Military</h2><div class="range">32I–32I</div></div>
+        <div class="tape">Grey</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>32I</strong></td><td>2</td></tr><tr><td>Folk &amp; Country</td><td><strong>32I</strong></td><td>2</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#fff;color:#111">
+        <div><h2>Non-Music</h2><div class="range">32J–32K</div></div>
+        <div class="tape">White</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>32J</strong></td><td>49</td></tr><tr><td>Rock</td><td><strong>32J</strong></td><td>1</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>32J</strong></td><td>4</td></tr><tr><td>Folk &amp; Country</td><td><strong>32J–32K</strong></td><td>20</td></tr><tr><td>World</td><td><strong>32K</strong></td><td>2</td></tr><tr><td>Pop</td><td><strong>32K</strong></td><td>2</td></tr><tr><td>Children&#x27;s</td><td><strong>32K</strong></td><td>2</td></tr></tbody></table>
+      </div>
+    </section>
+    <section class="genre-card">
+      <header style="background:#d4af37;color:#111">
+        <div><h2>Children&#x27;s</h2><div class="range">32L–32L</div></div>
+        <div class="tape">Gold</div>
+      </header>
+      <div class="body">
+        <table><thead><tr><th>Secondary genre</th><th>Shelf range(s)</th><th>CDs</th></tr></thead>
+        <tbody><tr><td>None</td><td><strong>32L</strong></td><td>15</td></tr><tr><td>Classical/Stage&amp;Screen</td><td><strong>32L</strong></td><td>3</td></tr><tr><td>Folk &amp; Country</td><td><strong>32L</strong></td><td>29</td></tr><tr><td>Electronic</td><td><strong>32L</strong></td><td>1</td></tr><tr><td>Non-Music</td><td><strong>32L</strong></td><td>1</td></tr></tbody></table>
+      </div>
+    </section></div>
+<details><summary>SHELF-BY-SHELF</summary>
+<p class="note">DATABASE ASSIGNMENTS BY FINAL SHELF · USE FOR TRANSITIONS / SPOT CHECKS</p>
+<table class="shelf-table"><thead><tr><th>Shelf</th><th>CDs</th><th>Primary genres</th><th>Secondary genres</th></tr></thead><tbody><tr><td><strong>1A</strong></td><td>26</td><td>Hip Hop (26)</td><td>None (26)</td></tr><tr><td><strong>1B</strong></td><td>26</td><td>Hip Hop (26)</td><td>None (26)</td></tr><tr><td><strong>1C</strong></td><td>26</td><td>Hip Hop (26)</td><td>None (26)</td></tr><tr><td><strong>1D</strong></td><td>26</td><td>Hip Hop (26)</td><td>None (26)</td></tr><tr><td><strong>1E</strong></td><td>26</td><td>Hip Hop (26)</td><td>None (26)</td></tr><tr><td><strong>1F</strong></td><td>26</td><td>Hip Hop (26)</td><td>None (26)</td></tr><tr><td><strong>1G</strong></td><td>26</td><td>Hip Hop (26)</td><td>None (24), Jazz (2)</td></tr><tr><td><strong>1H</strong></td><td>26</td><td>Hip Hop (26)</td><td>Jazz (20), Rock (6)</td></tr><tr><td><strong>1I</strong></td><td>26</td><td>Hip Hop (26)</td><td>Rock (17), Pop (6), Folk &amp; Country (2), Classical/Stage&amp;Screen (1)</td></tr><tr><td><strong>1J</strong></td><td>26</td><td>Hip Hop (26)</td><td>Funk / Soul (21), World (2), Reggae (2), Pop (1)</td></tr><tr><td><strong>1K</strong></td><td>11</td><td>Hip Hop (11)</td><td>Reggae (7), Latin (3), Non-Music (1)</td></tr><tr><td><strong>1L</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>1M</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>1N</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>1O</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>1P</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>1Q</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2A</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2B</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2C</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2D</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2E</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2F</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2G</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2H</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2I</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2J</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2K</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2L</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2M</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2N</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2O</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2P</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>2Q</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3A</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3B</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3C</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3D</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3E</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3F</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3G</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3H</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3I</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3J</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3K</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3L</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3M</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3N</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3O</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3P</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>3Q</strong></td><td>26</td><td>Jazz (26)</td><td>None (26)</td></tr><tr><td><strong>4A</strong></td><td>44</td><td>Jazz (44)</td><td>None (44)</td></tr><tr><td><strong>4B</strong></td><td>44</td><td>Jazz (44)</td><td>None (44)</td></tr><tr><td><strong>4C</strong></td><td>44</td><td>Jazz (44)</td><td>None (44)</td></tr><tr><td><strong>4D</strong></td><td>44</td><td>Jazz (44)</td><td>None (44)</td></tr><tr><td><strong>4E</strong></td><td>44</td><td>Jazz (44)</td><td>None (44)</td></tr><tr><td><strong>4F</strong></td><td>44</td><td>Jazz (44)</td><td>None (44)</td></tr><tr><td><strong>5A</strong></td><td>42</td><td>Jazz (42)</td><td>None (42)</td></tr><tr><td><strong>5B</strong></td><td>42</td><td>Jazz (42)</td><td>None (42)</td></tr><tr><td><strong>5C</strong></td><td>42</td><td>Jazz (42)</td><td>None (42)</td></tr><tr><td><strong>5D</strong></td><td>42</td><td>Jazz (42)</td><td>None (42)</td></tr><tr><td><strong>5E</strong></td><td>42</td><td>Jazz (42)</td><td>None (42)</td></tr><tr><td><strong>5F</strong></td><td>42</td><td>Jazz (42)</td><td>None (42)</td></tr><tr><td><strong>6A</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6B</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6C</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6D</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6E</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6F</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6G</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6H</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6I</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6J</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6K</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6M</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6N</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6O</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6P</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>6Q</strong></td><td>28</td><td>Jazz (28)</td><td>None (28)</td></tr><tr><td><strong>7A</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7B</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7C</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7D</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7E</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7F</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7G</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7H</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7I</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7J</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7K</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7L</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7M</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7N</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7O</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7P</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>7Q</strong></td><td>29</td><td>Jazz (29)</td><td>None (29)</td></tr><tr><td><strong>8A</strong></td><td>32</td><td>Jazz (32)</td><td>None (32)</td></tr><tr><td><strong>8B</strong></td><td>32</td><td>Jazz (32)</td><td>None (32)</td></tr><tr><td><strong>8C</strong></td><td>32</td><td>Jazz (32)</td><td>None (32)</td></tr><tr><td><strong>8D</strong></td><td>32</td><td>Jazz (32)</td><td>None (32)</td></tr><tr><td><strong>8E</strong></td><td>32</td><td>Jazz (32)</td><td>None (32)</td></tr><tr><td><strong>8F</strong></td><td>32</td><td>Jazz (32)</td><td>None (32)</td></tr><tr><td><strong>8G</strong></td><td>32</td><td>Jazz (32)</td><td>None (32)</td></tr><tr><td><strong>8H</strong></td><td>32</td><td>Jazz (32)</td><td>None (16), Rock (16)</td></tr><tr><td><strong>8I</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8J</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8K</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8L</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8M</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8N</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8O</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8P</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>8Q</strong></td><td>32</td><td>Jazz (32)</td><td>Rock (32)</td></tr><tr><td><strong>9A</strong></td><td>37</td><td>Jazz (37)</td><td>Rock (37)</td></tr><tr><td><strong>9B</strong></td><td>37</td><td>Jazz (37)</td><td>Classical/Stage&amp;Screen (27), Rock (10)</td></tr><tr><td><strong>9C</strong></td><td>37</td><td>Jazz (37)</td><td>Classical/Stage&amp;Screen (37)</td></tr><tr><td><strong>9D</strong></td><td>37</td><td>Jazz (37)</td><td>Classical/Stage&amp;Screen (23), Folk &amp; Country (14)</td></tr><tr><td><strong>9E</strong></td><td>37</td><td>Jazz (37)</td><td>Folk &amp; Country (37)</td></tr><tr><td><strong>9F</strong></td><td>37</td><td>Jazz (37)</td><td>Folk &amp; Country (37)</td></tr><tr><td><strong>9G</strong></td><td>37</td><td>Jazz (37)</td><td>Pop (23), Folk &amp; Country (14)</td></tr><tr><td><strong>9H</strong></td><td>37</td><td>Jazz (37)</td><td>Pop (28), Funk / Soul (9)</td></tr><tr><td><strong>9I</strong></td><td>37</td><td>Jazz (37)</td><td>Funk / Soul (37)</td></tr><tr><td><strong>9J</strong></td><td>37</td><td>Jazz (37)</td><td>Funk / Soul (28), Blues (9)</td></tr><tr><td><strong>9K</strong></td><td>37</td><td>Jazz (37)</td><td>Blues (37)</td></tr><tr><td><strong>9L</strong></td><td>37</td><td>Jazz (37)</td><td>Blues (37)</td></tr><tr><td><strong>9M</strong></td><td>37</td><td>Jazz (37)</td><td>World (29), Blues (8)</td></tr><tr><td><strong>9N</strong></td><td>37</td><td>Jazz (37)</td><td>Reggae (20), Latin (10), World (7)</td></tr><tr><td><strong>9O</strong></td><td>37</td><td>Jazz (37)</td><td>Latin (37)</td></tr><tr><td><strong>9P</strong></td><td>37</td><td>Jazz (37)</td><td>Latin (37)</td></tr><tr><td><strong>9Q</strong></td><td>37</td><td>Jazz (37)</td><td>Latin (37)</td></tr><tr><td><strong>10A</strong></td><td>35</td><td>Jazz (35)</td><td>Latin (17), Non-Music (16), Brass &amp; Military (2)</td></tr><tr><td><strong>10B</strong></td><td>3</td><td>Jazz (3)</td><td>Non-Music (2), Children&#x27;s (1)</td></tr><tr><td><strong>10C</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10D</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10E</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10F</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10G</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10H</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10I</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10J</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10K</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10L</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10M</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10N</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10O</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10P</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>10Q</strong></td><td>35</td><td>Rock (35)</td><td>None (35)</td></tr><tr><td><strong>11A</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11B</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11C</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11D</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11E</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11F</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11G</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11H</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11I</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11J</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11K</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11L</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11M</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11N</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11O</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11P</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>11Q</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12A</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12B</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12C</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12D</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12E</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12F</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12G</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12H</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12I</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12J</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12K</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12L</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12M</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12N</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12O</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12P</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>12Q</strong></td><td>36</td><td>Rock (36)</td><td>None (36)</td></tr><tr><td><strong>13A</strong></td><td>27</td><td>Rock (27)</td><td>None (27)</td></tr><tr><td><strong>13B</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13C</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13D</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13E</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13F</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13G</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13H</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13I</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>13J</strong></td><td>41</td><td>Rock (41)</td><td>None (41)</td></tr><tr><td><strong>14A</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>14B</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>14C</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>14D</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>14E</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>14F</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>14G</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>14H</strong></td><td>39</td><td>Rock (39)</td><td>None (39)</td></tr><tr><td><strong>15A</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15B</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15C</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15D</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15E</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15F</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15G</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15H</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15I</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15J</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15K</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15L</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15M</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15N</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15O</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15P</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>15Q</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>16A</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16B</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16C</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16D</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16E</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16F</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16G</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16H</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16I</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16J</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16K</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16L</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16M</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16N</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16O</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16P</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>16Q</strong></td><td>30</td><td>Rock (30)</td><td>None (30)</td></tr><tr><td><strong>17A</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17B</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17C</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17D</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17E</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17F</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17G</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17H</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17I</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17J</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17K</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17L</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17M</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17N</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17O</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17P</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>17Q</strong></td><td>34</td><td>Rock (34)</td><td>None (34)</td></tr><tr><td><strong>18A</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18B</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18C</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18D</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18E</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18F</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18H</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18I</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18J</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18K</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18L</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18M</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18N</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18O</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18P</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>18Q</strong></td><td>29</td><td>Rock (29)</td><td>None (29)</td></tr><tr><td><strong>19A</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19B</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19C</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19D</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19E</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19F</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19G</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19H</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19I</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19J</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19K</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19L</strong></td><td>50</td><td>Rock (50)</td><td>None (50)</td></tr><tr><td><strong>19M</strong></td><td>50</td><td>Rock (50)</td><td>None (48), Classical/Stage&amp;Screen (2)</td></tr><tr><td><strong>19N</strong></td><td>50</td><td>Rock (50)</td><td>Classical/Stage&amp;Screen (33), Folk &amp; Country (17)</td></tr><tr><td><strong>19P</strong></td><td>50</td><td>Rock (50)</td><td>Folk &amp; Country (50)</td></tr><tr><td><strong>20A</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>20B</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>20C</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>20D</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>20E</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>20F</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>20G</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>20H</strong></td><td>58</td><td>Rock (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>21A</strong></td><td>59</td><td>Rock (59)</td><td>Folk &amp; Country (35), Pop (24)</td></tr><tr><td><strong>21B</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21C</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21D</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21E</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21F</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21G</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21H</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21I</strong></td><td>59</td><td>Rock (59)</td><td>Pop (59)</td></tr><tr><td><strong>21J</strong></td><td>59</td><td>Rock (59)</td><td>Pop (32), Funk / Soul (27)</td></tr><tr><td><strong>21K</strong></td><td>59</td><td>Rock (59)</td><td>Funk / Soul (56), Blues (3)</td></tr><tr><td><strong>21L</strong></td><td>59</td><td>Rock (59)</td><td>Blues (59)</td></tr><tr><td><strong>21M</strong></td><td>59</td><td>Rock (59)</td><td>Blues (59)</td></tr><tr><td><strong>21N</strong></td><td>59</td><td>Rock (59)</td><td>Blues (59)</td></tr><tr><td><strong>21O</strong></td><td>59</td><td>Rock (59)</td><td>Blues (46), World (8), Reggae (5)</td></tr><tr><td><strong>21P</strong></td><td>59</td><td>Rock (59)</td><td>Reggae (59)</td></tr><tr><td><strong>22A</strong></td><td>58</td><td>Rock (58)</td><td>Latin (40), Non-Music (13), Brass &amp; Military (3), Reggae (2)</td></tr><tr><td><strong>22B</strong></td><td>16</td><td>Rock (16)</td><td>Non-Music (8), Children&#x27;s (8)</td></tr><tr><td><strong>22C</strong></td><td>58</td><td>Classical/Stage&amp;Screen (58)</td><td>None (57), Classical/Stage&amp;Screen (1)</td></tr><tr><td><strong>22D</strong></td><td>58</td><td>Classical/Stage&amp;Screen (58)</td><td>None (56), Classical/Stage&amp;Screen (2)</td></tr><tr><td><strong>22E</strong></td><td>58</td><td>Classical/Stage&amp;Screen (58)</td><td>None (58)</td></tr><tr><td><strong>22F</strong></td><td>58</td><td>Classical/Stage&amp;Screen (58)</td><td>None (57), Classical/Stage&amp;Screen (1)</td></tr><tr><td><strong>22G</strong></td><td>58</td><td>Classical/Stage&amp;Screen (58)</td><td>None (56), Classical/Stage&amp;Screen (2)</td></tr><tr><td><strong>22H</strong></td><td>58</td><td>Classical/Stage&amp;Screen (58)</td><td>None (42), Folk &amp; Country (14), Jazz (2)</td></tr><tr><td><strong>22I</strong></td><td>30</td><td>Classical/Stage&amp;Screen (30)</td><td>Folk &amp; Country (11), World (8), Electronic (7), Children&#x27;s (3), Non-Music (1)</td></tr><tr><td><strong>22J</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>22K</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>22L</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>22M</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>22N</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>22O</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>22P</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>23A</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23B</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23C</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23D</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23E</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23F</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23G</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23H</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23I</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23J</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23K</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23L</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23M</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23N</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23O</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>23P</strong></td><td>59</td><td>Folk &amp; Country (59)</td><td>None (59)</td></tr><tr><td><strong>24A</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24B</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24C</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24D</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24E</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24F</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24G</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24H</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24I</strong></td><td>58</td><td>Folk &amp; Country (58)</td><td>None (58)</td></tr><tr><td><strong>24J</strong></td><td>32</td><td>Folk &amp; Country (32)</td><td>Classical/Stage&amp;Screen (14), Rock (8), None (4), Jazz (2), Funk / Soul (1), Pop (1), Latin (1), Reggae (1)</td></tr><tr><td><strong>24K</strong></td><td>58</td><td>Pop (58)</td><td>None (58)</td></tr><tr><td><strong>24L</strong></td><td>58</td><td>Pop (58)</td><td>None (36), Rock (15), Classical/Stage&amp;Screen (5), Folk &amp; Country (2)</td></tr><tr><td><strong>24M</strong></td><td>58</td><td>Pop (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>24N</strong></td><td>41</td><td>Pop (41)</td><td>World (21), Children&#x27;s (11), Folk &amp; Country (9)</td></tr><tr><td><strong>24O</strong></td><td>58</td><td>Funk / Soul (58)</td><td>None (58)</td></tr><tr><td><strong>24P</strong></td><td>58</td><td>Funk / Soul (58)</td><td>None (57), Hip Hop (1)</td></tr><tr><td><strong>25A</strong></td><td>58</td><td>Funk / Soul (58)</td><td>Blues (35), Folk &amp; Country (8), Pop (8), Classical/Stage&amp;Screen (4), Hip Hop (1), Jazz (1), Rock (1)</td></tr><tr><td><strong>25B</strong></td><td>35</td><td>Funk / Soul (35)</td><td>Blues (17), World (15), Non-Music (2), Reggae (1)</td></tr><tr><td><strong>25C</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25D</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25E</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25F</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25G</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25H</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25I</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25J</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25K</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25L</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25M</strong></td><td>58</td><td>Blues (58)</td><td>None (58)</td></tr><tr><td><strong>25N</strong></td><td>58</td><td>Blues (58)</td><td>None (39), Folk &amp; Country (11), Rock (6), Classical/Stage&amp;Screen (2)</td></tr><tr><td><strong>25O</strong></td><td>58</td><td>Blues (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>25P</strong></td><td>58</td><td>Blues (58)</td><td>Folk &amp; Country (58)</td></tr><tr><td><strong>26A</strong></td><td>42</td><td>Blues (42)</td><td>Folk &amp; Country (28), World (6), Non-Music (3), Pop (2), Funk / Soul (1), Electronic (1), Brass &amp; Military (1)</td></tr><tr><td><strong>26B</strong></td><td>72</td><td>World (72)</td><td>None (72)</td></tr><tr><td><strong>26C</strong></td><td>72</td><td>World (72)</td><td>None (72)</td></tr><tr><td><strong>26D</strong></td><td>72</td><td>World (72)</td><td>None (72)</td></tr><tr><td><strong>26E</strong></td><td>42</td><td>World (42)</td><td>None (36), Classical/Stage&amp;Screen (5), Funk / Soul (1)</td></tr><tr><td><strong>26F</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26G</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26H</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26I</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26J</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26K</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26L</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26M</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26N</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26O</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>26P</strong></td><td>72</td><td>Electronic (72)</td><td>None (72)</td></tr><tr><td><strong>27A</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27B</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27C</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27D</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27E</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27F</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27G</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27H</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27I</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27J</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27K</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27L</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27M</strong></td><td>65</td><td>Electronic (65)</td><td>None (65)</td></tr><tr><td><strong>27N</strong></td><td>65</td><td>Electronic (65)</td><td>None (41), Hip Hop (24)</td></tr><tr><td><strong>27O</strong></td><td>65</td><td>Electronic (65)</td><td>Hip Hop (65)</td></tr><tr><td><strong>28A</strong></td><td>40</td><td>Electronic (40)</td><td>Hip Hop (40)</td></tr><tr><td><strong>28B</strong></td><td>40</td><td>Electronic (40)</td><td>Hip Hop (40)</td></tr><tr><td><strong>28C</strong></td><td>40</td><td>Electronic (40)</td><td>Hip Hop (40)</td></tr><tr><td><strong>28D</strong></td><td>40</td><td>Electronic (40)</td><td>Hip Hop (34), Jazz (6)</td></tr><tr><td><strong>28E</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>28F</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>28G</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>28H</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>28I</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>28J</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>28K</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>28L</strong></td><td>40</td><td>Electronic (40)</td><td>Jazz (40)</td></tr><tr><td><strong>29A</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (31), Jazz (5)</td></tr><tr><td><strong>29B</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29C</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29D</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29E</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29F</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29G</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29H</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29I</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29J</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29K</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>29L</strong></td><td>36</td><td>Electronic (36)</td><td>Rock (36)</td></tr><tr><td><strong>30A</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30B</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30C</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30D</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30E</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30F</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30G</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30H</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30I</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30J</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30K</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30L</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30M</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>30N</strong></td><td>44</td><td>Electronic (44)</td><td>Rock (44)</td></tr><tr><td><strong>31A</strong></td><td>46</td><td>Electronic (46)</td><td>Rock (46)</td></tr><tr><td><strong>31B</strong></td><td>46</td><td>Electronic (46)</td><td>Classical/Stage&amp;Screen (30), Rock (16)</td></tr><tr><td><strong>31C</strong></td><td>46</td><td>Electronic (46)</td><td>Classical/Stage&amp;Screen (46)</td></tr><tr><td><strong>31D</strong></td><td>46</td><td>Electronic (46)</td><td>Folk &amp; Country (40), Classical/Stage&amp;Screen (6)</td></tr><tr><td><strong>31E</strong></td><td>46</td><td>Electronic (46)</td><td>Pop (34), Folk &amp; Country (12)</td></tr><tr><td><strong>31F</strong></td><td>46</td><td>Electronic (46)</td><td>Pop (46)</td></tr><tr><td><strong>31G</strong></td><td>46</td><td>Electronic (46)</td><td>Pop (46)</td></tr><tr><td><strong>31H</strong></td><td>46</td><td>Electronic (46)</td><td>Funk / Soul (33), Blues (7), World (5), Pop (1)</td></tr><tr><td><strong>31I</strong></td><td>46</td><td>Electronic (46)</td><td>Reggae (35), World (7), Latin (4)</td></tr><tr><td><strong>31J</strong></td><td>46</td><td>Electronic (46)</td><td>Latin (23), Non-Music (23)</td></tr><tr><td><strong>31K</strong></td><td>27</td><td>Electronic (27)</td><td>Non-Music (26), Children&#x27;s (1)</td></tr><tr><td><strong>31L</strong></td><td>46</td><td>Reggae (46)</td><td>None (46)</td></tr><tr><td><strong>31M</strong></td><td>46</td><td>Reggae (46)</td><td>None (46)</td></tr><tr><td><strong>31N</strong></td><td>46</td><td>Reggae (46)</td><td>None (46)</td></tr><tr><td><strong>32A</strong></td><td>72</td><td>Reggae (72)</td><td>None (72)</td></tr><tr><td><strong>32B</strong></td><td>72</td><td>Reggae (72)</td><td>None (72)</td></tr><tr><td><strong>32C</strong></td><td>72</td><td>Reggae (72)</td><td>None (72)</td></tr><tr><td><strong>32D</strong></td><td>72</td><td>Reggae (72)</td><td>None (58), Folk &amp; Country (6), Rock (4), Classical/Stage&amp;Screen (3), Pop (1)</td></tr><tr><td><strong>32E</strong></td><td>34</td><td>Reggae (34)</td><td>Funk / Soul (9), Latin (9), World (6), Blues (4), Pop (4), Non-Music (2)</td></tr><tr><td><strong>32F</strong></td><td>72</td><td>Latin (72)</td><td>None (72)</td></tr><tr><td><strong>32G</strong></td><td>72</td><td>Latin (72)</td><td>Folk &amp; Country (44), None (20), Classical/Stage&amp;Screen (4), Pop (4)</td></tr><tr><td><strong>32H</strong></td><td>68</td><td>Latin (68)</td><td>World (50), Funk / Soul (15), Blues (1), Pop (1), Children&#x27;s (1)</td></tr><tr><td><strong>32I</strong></td><td>4</td><td>Brass &amp; Military (4)</td><td>None (2), Folk &amp; Country (2)</td></tr><tr><td><strong>32J</strong></td><td>72</td><td>Non-Music (72)</td><td>None (49), Folk &amp; Country (18), Classical/Stage&amp;Screen (4), Rock (1)</td></tr><tr><td><strong>32K</strong></td><td>8</td><td>Non-Music (8)</td><td>World (2), Folk &amp; Country (2), Pop (2), Children&#x27;s (2)</td></tr><tr><td><strong>32L</strong></td><td>49</td><td>Children&#x27;s (49)</td><td>Folk &amp; Country (29), None (15), Classical/Stage&amp;Screen (3), Electronic (1), Non-Music (1)</td></tr></tbody></table>
+</details>
+</main>
+<script>
+const q=document.getElementById('search');
+q.addEventListener('input',()=>{
+  const s=q.value.trim().toLowerCase();
+  document.querySelectorAll('.genre-card').forEach(c=>c.classList.toggle('hidden',s && !c.innerText.toLowerCase().includes(s)));
+});
+</script></body></html>
