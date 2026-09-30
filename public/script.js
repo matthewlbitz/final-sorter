@@ -32,6 +32,17 @@ function render(){
   if(view.type==='source'||view.type==='column')return renderStack();
   if(view.type==='unassigned')return renderUnassigned();
   if(view.type==='pull')return renderPull(0);
+  const priorities=state.handoff.targets||[];
+  if(priorities.length&&!state.items.some(i=>i.stage!=='sorted')){
+    const rec=priorities[0],box=el('section');box.className='next';
+    el('h2',`Recommended next: ${rec.shelf}`,box);
+    el('p',`${rec.expected} target CDs · ${rec.ready} already there · ${rec.pullCount} source shelves · ~${rec.handled} CDs to handle`,box);
+    el('p',`${rec.coworker} additional coworker jobs · ${rec.excluded} unassigned / excluded target CDs`,box);
+    button(`Choose ${rec.shelf}`,async()=>{await action('target',{shelf:rec.shelf});render();},box);
+    const options=el('details',undefined,box);el('summary','Compare next targets',options);
+    for(const r of priorities.slice(1,6))button(`${r.shelf} · ${r.expected} target CDs / ${r.pullCount} pulls / ~${r.handled} handled`,async()=>{await action('target',{shelf:r.shelf});render();},options,true);
+    el('p','Estimated payoff per handling effort, not a timed route. Recalculates as CDs move. Keep clearing excluded backlog shelves separately.',options);
+  }
   const f=form(async()=>{await action('target',{shelf:select.value});render();});f.className='target-picker';
   const targetLabel=el('label','Target shelf',f), select=el('select',undefined,targetLabel);
   for(const label of state.shelves){const option=el('option',label,select);option.value=label;option.selected=label===state.targetShelf;}

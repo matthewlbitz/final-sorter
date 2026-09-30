@@ -62,3 +62,11 @@ Your coworker can use **Coworker** in the header without changing your sorting t
 ## Unusable shelves
 
 26P and 27P are excluded from destination allocation and old-location recommendations because CDs do not fit. Historical source labels remain intact. The catalog rejects new final-shelf assignments to either shelf. `shelf-capacities.json` preserves the allocation estimates and exclusions. The reallocation preserved the canonical genre/subgenre/artist/title order, fresh shelves for primary genres, and five reserved slots per shelf. Children’s now occupies 32M; 32N is spare. `shelf-reallocation-audit.json` lists every changed destination and the pre-change backup.
+
+## Recommended targets
+
+The home screen offers a recommended next target and up to five alternatives when no physical stacks are active. It never changes your target automatically. Ranking uses current location estimates and skips visited targets and unavailable CDs. It shows target yield, ready CDs, unique source pulls, estimated full-source handling, extra coworker jobs, and excluded target records. Unassigned records count toward source workload only, not guaranteed yield. Source estimates can omit unknown or misplaced CDs.
+
+The relative score is (available target CDs + coworker weight × extra coworker jobs + 0.1 × future placements) / (20 × pulls + estimated source CDs handled + primary tape jobs + 1). Coworker weight is 0.5 with an empty queue and 0.25 otherwise. This is a heuristic, not a measured time estimate or optimal route. Keep manual backlog intake separate. Recalculate by refreshing after external assignments or another operator's changes.
+
+The offline HTML report opens on ranked recommendations. Navigation separates shelf browsing, coworker handoff, backlog, locations, genre breakdowns, tape reference, and totals. The shelf browser shows one column at a time; search and status filters span all columns. Print exports the current view. Offline snapshots do not update themselves.

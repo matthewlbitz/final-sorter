@@ -137,7 +137,7 @@ function openStore(filename) {
     const recommendations=[...groups.values()].sort((a,b)=>rank(a)-rank(b)||b.count-a.count||a.label.localeCompare(b.label,undefined,{numeric:true}));
     const ready=alreadyShelved.length?[{key:`final-${targetShelf}`,label:`Shelf ${targetShelf}`,type:'already-shelved',count:alreadyShelved.length}]:[];
     return {revision:m.revision,targetShelf,targetColumn,shelves,start:targetShelf,end:targetShelf,total,remaining,complete,unavailable,excludedUnassigned,
-      handoff:(()=>{const {passes,queue}=handoff.snapshot(db);return {passes,queue};})(),sources:sources.map(s=>({...s,count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length})),items,recommendations,
+      handoff:(()=>{const data=handoff.snapshot(db);return {passes:data.passes,queue:data.queue,targets:require('./target-priority').rankTargets(data,targetShelf)};})(),sources:sources.map(s=>({...s,count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length})),items,recommendations,
       predictedLocations:[...recommendations,...ready],inProgress:[...progress.values()],alreadyShelved,batch:m.batch?JSON.parse(m.batch):null};
   }
   function action(body) {
