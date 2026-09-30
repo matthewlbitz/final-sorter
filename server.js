@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const {openStore} = require('./workflow');
-function createApp(filename = process.env.KTRU_DB || path.join(__dirname, 'masterAlbums.db')) {
+function createApp(filename = process.env.KTRU_DB || path.join(__dirname, '..', 'data', 'masterAlbums.db')) {
   const store = openStore(filename);
   const app = express();
   app.use(express.json({limit:'32kb'}));
@@ -18,5 +18,5 @@ function createApp(filename = process.env.KTRU_DB || path.join(__dirname, 'maste
   app.use(express.static(path.join(__dirname,'public')));
   return {app,store};
 }
-if(require.main===module){const {app}=createApp();const port=process.env.PORT||3000;app.listen(port,'127.0.0.1',error=>{if(error){console.error(error.message);process.exitCode=1;}else console.log(`KTRU Final Sorter: http://localhost:${port}`);});}
+if(require.main===module){const {app}=createApp();const port=process.env.PORT||3001;app.listen(port,'127.0.0.1',error=>{if(error){console.error(error.message);process.exitCode=1;}else console.log(`KTRU Final Sorter: http://localhost:${port}`);});}
 module.exports={createApp};
