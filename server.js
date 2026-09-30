@@ -7,6 +7,8 @@ function createApp(filename = process.env.KTRU_DB || path.join(__dirname, 'maste
   app.use(express.json({limit:'32kb'}));
   app.use('/api', (_req,res,next)=>{res.set('Cache-Control','no-store');next();});
   app.get('/api/state', (_req,res)=>res.json(store.state()));
+  app.get('/api/report.html', (_req,res)=>res.attachment(`ktru-station-${new Date().toISOString().replace(/[:.]/g,'-')}.html`).type('html').send(store.reportHtml()));
+  app.get('/api/report.md', (_req,res)=>res.type('text/markdown').attachment(`ktru-station-${new Date().toISOString().replace(/[:.]/g,'-')}.md`).send(store.report()));
   app.get('/api/search', (req,res)=>res.json(store.search(req.query.q)));
   app.post('/api/action', (req,res)=>{try{res.json(store.action(req.body));}catch(e){res.status(409).json({error:e.message});}});
   app.get('/api/lookup/:barcode', (req,res)=>{

@@ -1,33 +1,64 @@
 # KTRU final sorter
 
-Run `npm start` in this folder, then open http://localhost:3000. Run `npm test` for workflow checks. `PORT` and `KTRU_DB` can override the port and catalog path.
+Run `npm start` in this folder and open http://localhost:3000. `PORT` and `KTRU_DB` override the port and catalog file. Run `npm test` for the workflow checks.
 
-1. Choose a target column (32 down to 1). Recommendations prioritize the highest final shelf, then the number of expected CDs, using `new_shelf_label` as the likely source.
-2. Scan the whole source shelf, placing each scanned CD on top of the stack. Unknown barcodes are accepted. Every scan is saved immediately; **Finish & save stack** closes scanning.
-3. Sort the displayed rows top to bottom, up to 10 CDs at a time. Put each CD on top of its numbered column pile or Unassigned. Confirm only after placing the whole displayed batch.
-4. Keep each numbered pile intact across source shelves. New arrivals go on top. Use **Unassigned** to search artist/title, confirm the album, then confirm placement onto its column pile.
-5. Open a column and sort into final shelves. Only the final placement confirmation marks these CDs sorted.
+## Target-shelf workflow
 
-Refresh or restart to resume. An open batch is frozen until confirmed. If you stop halfway through a batch, leave the displayed rows in place and finish the remaining rows before confirming. Do not place the already moved rows again after refresh. Use one physical sorting operator at a time; stale browser actions are rejected.
+1. Select an exact **target shelf**, such as `18Q`.
+2. Review **All pull locations**. Albums without barcodes are excluded from this retrieval list. You can still scan any source shelf manually while processing the unassigned/unsorted sections.
+3. Scan each actual source shelf and save it as a separate stack. Put each newly scanned CD on top. Scans save immediately. Scanning identifies a working location; it does not claim final placement.
+4. Sort saved source stacks into persistent destination-column piles, ten at a time. New arrivals go on top. Unknown barcodes go to Unassigned. Assign those in Shelf Lookup using this same catalog file, then use **Refresh assignments** and sort the identified stack into columns.
+5. Clear other columns first, placing those CDs directly into their `final_shelf` without requiring tape. In the target's column, the display distinguishes **TAPE PILE** (the exact target shelf) from **FINAL SHELF** (other destinations, including other shelves in that same column). Already-taped CDs can go directly to their final shelf.
+6. Open the target's persistent shelf pile. Apply primary (bottom) tape to consecutive CDs, up to ten at a time. Confirm primary taping and final placement. Secondary tape and review checks belong to the coworker handoff.
+7. **Already on this shelf — needs tape** lists previously confirmed placements. Scan those CDs individually at the shelf, apply the displayed primary tape, and confirm their return. Their physical order is not assumed.
 
-The catalog schema is inspected at startup. Before the first migration a consistent full SQLite backup is saved in `backups/before-catchall-*.db`. The migration adds only `catchall_*` tables. Existing catalog rows are preserved. Barcode assignment updates `rainbow_albums.barcode` and `assigned_at` with a transaction and an assignment audit record. Sorted state is stored in `catchall_items.stage` and `sorted_at`; no speculative sorted flags are added to catalog albums.
+Choose a new target after finishing the working stacks. Completed sources can be opened again and completed CDs can be scanned again; active duplicates are blocked. An unobserved CD can still be predicted at a previously visited source because visiting the source does not prove its entire contents were found.
 
-Saved or completed source shelves are not recommended again. Incomplete scanning shelves can be recommended with Resume so opening a shelf does not hide unfinished work. Albums already in the workflow are also excluded from recommendations. The remaining count still includes CDs in intermediate piles and catalog albums missing from a processed shelf. This does not claim a column complete until all its catalog albums have reached final shelves. Duplicate barcodes are blocked rather than silently counting one CD twice.
+## Location rules
 
-Physical placement follows the original shelf-lookup batch sorter's reversal convention. Source scan order is reversed to consume the top first; confirmed arrivals are appended in placement order, so each persistent column is again consumed newest first. Catalog destination changes are blocked during column-batch creation if they no longer match the physical column.
+For assigned albums belonging to the exact target `final_shelf`:
 
-The old app's unsaved browser-memory stacks cannot be recovered automatically; save/record those before reloading an old tab. Albums absent from the catalog, or without a valid final shelf, stay Unassigned until the catalog is corrected. Keep the database and its backups together when moving machines; do not replace it with a fresh catalog after starting work.
+- In a working source/column/shelf/Unassigned pile: show that known location immediately. Barcode assignments made outside this app are recognized for predictions even before reconciliation.
+- `sorted = 1`: use the confirmed final shelf. If primary tape is missing, show an on-shelf primary tape job. Primary-complete CDs leave the initial-pass queue; full completion is tracked separately.
+- Otherwise: estimate from `new_shelf_label`: only columns 9–18, 20, and 24–28 are trusted exact shelves. All other columns and missing labels are excluded from predictions and remain manual intake.
+- No assigned barcode: exclude it from retrieval predictions and report the excluded count.
 
-## Visual sorting guide
+The app records `sorted_shelf` alongside confirmed placement. If the catalog's final destination changes later, the previous confirmed shelf remains the predicted physical location until that CD is moved again. A manually set `sorted = 1` without a recorded `sorted_shelf` is interpreted as an explicit assertion of placement at its current `final_shelf`.
 
-The interface uses the black, goldenrod, and Courier styling from the other KTRU apps. Adjacent CDs with the exact same final shelf share a gold outline and a count label in both sorting stages. They stay in physical order; CDs going to different shelves in the same column are not grouped. Groups describe the current page of up to 10 CDs.
+## Progress and recovery
 
-Each known CD shows a labeled swatch for bottom tape (primary genre) and top tape (secondary genre), using the existing KTRU tape map. No secondary genre means no top tape. Missing or unrecognized genres say “check genre”; no color is guessed. Apply tape before confirming final-shelf placement. Same-shelf highlighting does not imply identical secondary tape.
+`rainbow_albums` now contains independent tracking fields:
 
-The selected column is saved using the existing target settings, so this update requires no database schema migration. An old range defaults to its highest column. Existing scans, stacks, and sorted records are preserved.
+- `scanned_at`: the CD was identified in a working stack.
+- `sorted`, `sorted_at`, `sorted_shelf`: final placement was confirmed.
+- `taped`, `taped_at`: the coworker confirmed primary tape, review presence/absence, and secondary tape (or no secondary genre). Legacy values are retained without assuming a review check.
+
+Working pile membership and order remain in `catchall_items`. Scanning a previously placed CD moves it back into a working stack and clears its current placement flag; its existing tape status is retained. Removing the latest uncommitted scan restores that scan's prior tracking state.
+
+A full SQLite backup is made before schema migration. Existing records, saved stacks, and open batches are retained. Legacy open batches finish according to their saved destinations. Do not run an old server version against the migrated database.
+
+Refresh or restart to resume the exact displayed batch. If interrupted halfway, finish only the rows you have not yet moved before confirming the whole batch. Use one physical sorting operator at a time. Stale confirmations are rejected.
+
+## Tape reference
+
+**Tape colors** under the header shows the shared KTRU map. Bottom = primary genre; top = secondary genre. No secondary genre means no top tape. Same-shelf neighbors are highlighted without reordering; they can still require different secondary colors. Unrecognized tape genres must be corrected before a tape section can start.
 
 ## Resetting test progress
 
-Open **Reset sorting progress** at the bottom of the page, type `RESET`, then choose **Back up & reset progress**. This clears scans, source stacks, column piles, active batches, sorted marks, and this workflow's assignment audit history. It preserves the selected target column and all catalog records, including barcode assignments. A full consistent database backup is written to `backups/before-reset-<unique-id>.db` before clearing anything; a failed backup prevents the reset. To recover a reset, stop the app and restore that full backup as `masterAlbums.db` (this also restores the catalog to that backup's point in time).
+At the bottom, expand **Reset sorting progress**, type `RESET`, and choose **Back up & reset progress**. A full database backup must succeed first. Reset clears this workflow's scans, piles, batches, and assignment audit, and restores the catalog tracking values captured before this workflow touched each album. It keeps album content, barcode assignments, and the selected target shelf. Existing placement/tape flags that predated this workflow are preserved. This reset is for test progress, not for rearranging physical stacks.
 
-Open **Tape colors** under the header for the compact genre/color chart. Bottom tape is the primary genre; top tape is the secondary genre. No secondary genre means no top tape.
+To restore the entire backup, stop the app and restore `backups/before-reset-<id>.db` as `masterAlbums.db`. This restores all catalog content to that backup's point in time as well.
+
+## Two-person handoff and station reports
+
+After all predicted pulls and primary tape are done for the selected target, expand **Initial passes & coworker handoff** and choose **Mark initial pass complete**. This is explicit, not inferred from selecting a shelf. Remaining unassigned and excluded CDs may arrive later. Use **Undo initial-pass mark** to correct a mistaken mark.
+
+Your coworker can use **Coworker** in the header without changing your sorting target, even while a sorting batch is open. Scan a ready CD, confirm primary tape, secondary tape (or none needed), and whether a review is present. A missing review is a checked result, not an incomplete check. Confirm only after the CD is on its final shelf. Later confirmed arrivals to a visited shelf appear automatically, including CDs needing primary tape. Refresh the handoff when new CDs arrive. Two clients can share the server; stale writes ask for a refresh and never silently override another confirmation.
+
+**Download station report (.html)** creates a standalone, read-only HTML snapshot on demand, styled like ktru_stacks_map.html. It works offline, includes searchable shelf cards and handoff filters, and supports printing. It includes station totals, visited shelves and dates, ready coworker CDs and missing work, every target's location query and counts, primary/secondary genre splits, tape combinations, working piles, and historical source backlog. Completed CDs remain in the report's location query; the interactive pull list omits CDs already primary-taped at their final location. Save a report each day to compare snapshots. Reports do not send themselves to your coworker.
+
+`catchall_passes` records initial passes and `catchall_finishing` records per-CD primary/secondary tape genre snapshots and review checks. A changed genre reopens the relevant tape task. Existing taped flags imply primary tape only; they never invent review checks. Reset clears these new tables alongside workflow progress. A consistent full backup precedes the additive migration.
+
+## Unusable shelves
+
+26P and 27P are excluded from destination allocation and old-location recommendations because CDs do not fit. Historical source labels remain intact. The catalog rejects new final-shelf assignments to either shelf. `shelf-capacities.json` preserves the allocation estimates and exclusions. The reallocation preserved the canonical genre/subgenre/artist/title order, fresh shelves for primary genres, and five reserved slots per shelf. Children’s now occupies 32M; 32N is spare. `shelf-reallocation-audit.json` lists every changed destination and the pre-change backup.
