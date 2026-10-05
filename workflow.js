@@ -21,10 +21,9 @@ function estimatedLocation(album) {
   }
 
   if (['26P','27P'].includes(old.label)) return null;
-  const c = old.column;
-  if ((c >= 9 && c <= 18) || c === 20 || (c >= 24 && c <= 28))
-    return {key:`shelf-${old.label}`,label:`Shelf ${old.label}`,type:'shelf'};
-  return null; // Broad/jumbled areas are manual intake, never shelf predictions.
+  const c=old.column;
+  if(!((c>=9&&c<=18)||c===20||(c>=24&&c<=28)))return null;
+  return {key:`shelf-${old.label}`,label:`Shelf ${old.label}`,type:'shelf'};
 
 }
 
@@ -86,6 +85,11 @@ function openStore(filename) {
   if(db.prepare('SELECT version FROM catchall_meta').get().version!==3) throw new Error('Unsupported workflow version');
   const handoff=require('./station-report');
   handoff.migrate(db,filename);
+  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name='catchall_unknown_locations'").get()){
+    const dir=path.join(path.dirname(filename),'backups');fs.mkdirSync(dir,{recursive:true});
+    db.exec(`VACUUM INTO '${path.join(dir,'before-location-tracking-'+require('crypto').randomUUID()+'.db').replaceAll("'","''")}'`);
+    db.exec('CREATE TABLE catchall_unknown_locations(album_rowid INTEGER PRIMARY KEY,marked_at TEXT NOT NULL)');
+  }
   db.pragma('foreign_keys = ON');
   const meta=()=>db.prepare('SELECT * FROM catchall_meta').get();
   const album=id=>db.prepare('SELECT rowid AS catalog_rowid,* FROM rainbow_albums WHERE rowid=?').get(id);
@@ -100,6 +104,20 @@ function openStore(filename) {
     db.prepare('UPDATE rainbow_albums SET scanned_at=?,sorted=0,sorted_shelf=NULL,sorted_at=NULL WHERE rowid=?').run(now,id);
   };
   const placed=a=>Number(a.sorted)===1&&(!a.sorted_shelf||shelf(a.sorted_shelf)?.label===shelf(a.final_shelf)?.label);
+  function finishSource(sourceId){
+          db.prepare("UPDATE catchall_sources SET status='complete' WHERE id=?").run(sourceId);
+          const label=shelf(db.prepare('SELECT label FROM catchall_sources WHERE id=?').get(sourceId)?.label)?.label;
+          if(label){
+            const active=new Set(db.prepare("SELECT album_rowid FROM catchall_items WHERE stage<>'sorted'").all().map(i=>i.album_rowid));
+            for(const a of db.prepare('SELECT rowid AS catalog_rowid,* FROM rainbow_albums').all()){
+              const location=shelf(a.sorted_shelf)?.label||(placed(a)?shelf(a.final_shelf)?.label:shelf(a.new_shelf_label)?.label);
+              if(location!==label||active.has(a.catalog_rowid))continue;
+              const now=new Date().toISOString();
+              db.prepare('INSERT INTO catchall_unknown_locations VALUES(?,?) ON CONFLICT(album_rowid) DO UPDATE SET marked_at=excluded.marked_at').run(a.catalog_rowid,now);
+              db.prepare('UPDATE rainbow_albums SET sorted=0,sorted_shelf=NULL,sorted_at=NULL WHERE rowid=?').run(a.catalog_rowid);
+            }
+          }
+  }
   function state() {
     const m=meta(), items=allItems(), sources=db.prepare('SELECT * FROM catchall_sources ORDER BY id DESC').all();
     const albums=db.prepare('SELECT rowid AS catalog_rowid,* FROM rainbow_albums').all();
@@ -110,6 +128,7 @@ function openStore(filename) {
     const activeByAlbum=new Map(items.filter(i=>i.album_rowid&&i.stage!=='sorted').map(i=>[i.album_rowid,i]));
     // External barcode assignments are immediately recognized for location prediction, even before Refresh assignments.
     const activeByBarcode=new Map(items.filter(i=>i.stage!=='sorted').map(i=>[i.barcode,i]));
+    const unknown=new Set(db.prepare('SELECT album_rowid FROM catchall_unknown_locations').all().map(i=>i.album_rowid));
     const groups=new Map(), progress=new Map(), alreadyShelved=[];
     let remaining=0,unavailable=0,excludedUnassigned=0,complete=0,total=0;
     for(const a of albums) {
@@ -124,6 +143,7 @@ function openStore(filename) {
         const label=item.stage==='source'?`Source stack ${source?.label}`:item.stage==='column'?`Column ${item.column_no} pile`:item.stage==='shelf'?`Shelf ${item.shelf_label} pile`:'Unassigned stack';
         const g=progress.get(key)||{key,label,stage:item.stage,sourceId:item.source_id,column:item.column_no,shelf:item.shelf_label,count:0};g.count++;progress.set(key,g);continue;
       }
+      if(unknown.has(a.catalog_rowid)){remaining++;unavailable++;continue;}
       if(placed(a)&&handoff.primaryDone(db,a)){complete++;continue;}
       remaining++;
       if(placed(a)){alreadyShelved.push(a);continue;}
@@ -134,52 +154,35 @@ function openStore(filename) {
       const g=groups.get(location.key)||{...location,count:0};g.count++;groups.set(location.key,g);
     }
     const rank=location=>location.type==='shelf'?1:location.type==='column'?2:3;
-    const recommendations=[...groups.values()].sort((a,b)=>rank(a)-rank(b)||b.count-a.count||a.label.localeCompare(b.label,undefined,{numeric:true}));
+    const recommendations=[...groups.values()].sort((a,b)=>rank(a)-rank(b)||a.label.localeCompare(b.label,undefined,{numeric:true}));
     const ready=alreadyShelved.length?[{key:`final-${targetShelf}`,label:`Shelf ${targetShelf}`,type:'already-shelved',count:alreadyShelved.length}]:[];
     return {revision:m.revision,targetShelf,targetColumn,shelves,start:targetShelf,end:targetShelf,total,remaining,complete,unavailable,excludedUnassigned,
-      handoff:(()=>{const data=handoff.snapshot(db);return {passes:data.passes,queue:data.queue,targets:require('./target-priority').rankTargets(data,targetShelf)};})(),sources:sources.map(s=>({...s,count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length})),items,recommendations,
+      handoff:{passes:db.prepare('SELECT * FROM catchall_passes').all()},sources:sources.map(s=>({...s,count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length})),items,recommendations,
       predictedLocations:[...recommendations,...ready],inProgress:[...progress.values()],alreadyShelved,batch:m.batch?JSON.parse(m.batch):null};
   }
   function action(body) {
-    let resetBackup;
-    if(body.type==='reset') {
-      if(body.confirmation!=='RESET')fail('Type RESET to clear sorting progress.');
-      if(body.revision!==meta().revision)fail('State changed. Refresh before resetting.');
-      const dir=path.join(path.dirname(filename),'backups');fs.mkdirSync(dir,{recursive:true});
-      resetBackup=path.join(dir,'before-reset-'+require('crypto').randomUUID()+'.db');
-      // A consistent full backup must succeed before anything is cleared.
-      db.exec(`VACUUM INTO '${resetBackup.replaceAll("'","''")}'`);
-    }
     let openedSourceId;
     return db.transaction(()=>{
       const m=meta();
       if(body.revision!==m.revision)fail('State changed. Refresh and check the current stack.');
       const b=m.batch?JSON.parse(m.batch):null;
-      if(b&&body.type!=='confirm'&&body.type!=='reset'&&body.type!=='coworker-finish')fail('Finish the displayed 10 CDs before changing stacks.');
+      if(b&&body.type!=='confirm'&&body.type!=='clear-stacks')fail('Finish the displayed 10 CDs before changing stacks.');
       const source=()=>db.prepare('SELECT * FROM catchall_sources WHERE id=?').get(body.sourceId)||fail('Source not found');
-      if(body.type==='reset'){
-        for(const a of db.prepare('SELECT * FROM catchall_catalog_baseline').all())db.prepare('UPDATE rainbow_albums SET sorted=?,taped=?,scanned_at=?,sorted_at=?,taped_at=?,sorted_shelf=? WHERE rowid=?').run(a.sorted,a.taped,a.scanned_at,a.sorted_at,a.taped_at,a.sorted_shelf,a.album_rowid);
-        db.exec('DELETE FROM catchall_passes; DELETE FROM catchall_finishing; DELETE FROM catchall_catalog_baseline; DELETE FROM catchall_assignments; DELETE FROM catchall_items; DELETE FROM catchall_sources;');
-        db.prepare('UPDATE catchall_meta SET sequence=0,batch=NULL').run();
+      if(body.type==='clear-stacks'){
+        // Abandon unfinished work only. Confirmed catalog placements and tape stay intact.
+        const active=db.prepare("SELECT * FROM catchall_items WHERE stage<>'sorted'").all();
+        for(const item of active){
+          if(item.album_rowid)db.prepare('UPDATE rainbow_albums SET sorted=0,sorted_shelf=NULL,sorted_at=NULL WHERE rowid=?').run(item.album_rowid);
+          db.prepare('DELETE FROM catchall_assignments WHERE item_id=?').run(item.id);
+          db.prepare('DELETE FROM catchall_items WHERE id=?').run(item.id);
+        }
+        db.exec("UPDATE catchall_sources SET status='complete'; DELETE FROM catchall_sources WHERE id NOT IN (SELECT source_id FROM catchall_items); UPDATE catchall_meta SET batch=NULL;");
       } else if(body.type==='initial-pass'){
         const current=state();
         if(current.recommendations.length||current.inProgress.length||current.alreadyShelved.length)fail('Finish the predicted pulls and primary taping for this target first.');
         db.prepare('INSERT INTO catchall_passes(shelf,completed_at) VALUES(?,?) ON CONFLICT(shelf) DO NOTHING').run(current.targetShelf,new Date().toISOString());
       } else if(body.type==='undo-pass'){
         db.prepare('DELETE FROM catchall_passes WHERE shelf=?').run(shelf(body.shelf)?.label||'');
-      } else if(body.type==='coworker-finish'){
-        const matches=db.prepare('SELECT rowid AS catalog_rowid,* FROM rainbow_albums WHERE TRIM(barcode)=?').all(String(body.barcode||'').trim());
-        if(matches.length!==1)fail('Scan a uniquely assigned barcode.');
-        const a=matches[0];
-        const pending=handoff.snapshot(db).queue.find(i=>i.catalog_rowid===a.catalog_rowid);
-        if(!pending)fail('This CD is not on a visited shelf ready for coworker finishing. Refresh the handoff.');
-        if(typeof body.hasReview!=='boolean'||body.primaryConfirmed!==true||body.secondaryConfirmed!==true)fail('Confirm primary tape, review check, and secondary tape before finishing.');
-        if(!tape(a.primary_genre)?.hex||(tape(a.secondary_genre)&&!tape(a.secondary_genre).hex))fail('Correct the tape genres before finishing.');
-        captureBaseline(a.catalog_rowid);
-        const now=new Date().toISOString();
-        db.prepare(`INSERT INTO catchall_finishing(album_rowid,primary_at,primary_genre,secondary_at,secondary_genre,review_at,has_review) VALUES(?,?,?,?,?,?,?)
-          ON CONFLICT(album_rowid) DO UPDATE SET primary_at=COALESCE(primary_at,excluded.primary_at),primary_genre=excluded.primary_genre,secondary_at=excluded.secondary_at,secondary_genre=excluded.secondary_genre,review_at=excluded.review_at,has_review=excluded.has_review`).run(a.catalog_rowid,now,a.primary_genre||'',now,a.secondary_genre||'',now,Number(body.hasReview));
-        db.prepare('UPDATE rainbow_albums SET taped=1,taped_at=? WHERE rowid=?').run(now,a.catalog_rowid);
       } else if(body.type==='target'){
         const target=shelf(body.shelf);
         if(!target||!state().shelves.includes(target.label))fail('Choose a populated final shelf.');
@@ -187,6 +190,8 @@ function openStore(filename) {
         db.prepare('UPDATE catchall_meta SET target_shelf=?,range_start=?,range_end=?').run(target.label,target.label,target.label);
       } else if(body.type==='range'){
         fail('Choose a target shelf instead. Refresh this page.');
+      } else if(body.type==='scan-sort') {
+        openedSourceId=Number(db.prepare("INSERT INTO catchall_sources(label,status) VALUES(?,'scanning')").run('Scan & Sort '+(db.prepare('SELECT COALESCE(MAX(id),0)+1 AS next FROM catchall_sources').get().next)).lastInsertRowid);
       } else if(body.type==='source') {
         const label=String(body.label||'').trim().toUpperCase();if(!shelf(label))fail('Enter an actual source shelf, such as 19A.');
         const existing=db.prepare('SELECT * FROM catchall_sources WHERE label=?').get(label);
@@ -221,6 +226,11 @@ function openStore(filename) {
             db.prepare('UPDATE catchall_items SET source_id=?,album_rowid=?,stage=?,column_no=?,position=?,sorted_at=?,shelf_label=?,taped_at=?,scanned_at=?,scan_previous=? WHERE id=?').run(item.source_id,item.album_rowid,item.stage,item.column_no,item.position,item.sorted_at,item.shelf_label,item.taped_at,item.scanned_at,item.scan_previous,item.id);
           }else db.prepare('DELETE FROM catchall_items WHERE id=?').run(last.id);
         }
+      } else if(body.type==='empty-source'){
+        const s=source();
+        if(s.status!=='scanning'||!shelf(s.label))fail('Choose a source shelf currently being scanned.');
+        if(db.prepare("SELECT 1 FROM catchall_items WHERE source_id=? AND stage='source'").get(s.id))fail('Finish scanning this stack before marking its shelf empty.');
+        finishSource(s.id);
       } else if(body.type==='save') {
         const s=source();if(s.status!=='scanning')fail('Stack already saved.');
         if(!db.prepare('SELECT 1 FROM catchall_items WHERE source_id=?').get(s.id))fail('Scan at least one CD.');
@@ -238,8 +248,12 @@ function openStore(filename) {
         db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:'tape-existing',shelf:target,rows:[{id:existing?.id,album_rowid:a.catalog_rowid,barcode:code,album:a,destination:target}]}));
       } else if(body.type==='batch') {
         let items, mode;
-        if(body.kind==='source') {
-          const s=source();if(s.status!=='saved')fail('Save this source stack first.');
+        if(body.kind==='scan-sort') {
+          const s=source();if(s.status!=='saved'||!s.label.startsWith('Scan & Sort '))fail('Finish scanning this Scan & Sort stack first.');
+          items=db.prepare("SELECT * FROM catchall_items WHERE source_id=? AND stage='source' ORDER BY position DESC LIMIT 10").all(s.id);
+          mode='columns';
+        }else if(body.kind==='source') {
+          const s=source();if(s.label.startsWith('Scan & Sort '))fail('Use Scan & Sort for this stack.');if(s.status!=='saved')fail('Save this source stack first.');
           items=db.prepare("SELECT * FROM catchall_items WHERE source_id=? AND stage='source' ORDER BY position DESC LIMIT 10").all(s.id);
         }else if(body.kind==='unassigned') {
 
@@ -261,11 +275,11 @@ function openStore(filename) {
             ).all();
 
             mode = 'columns';
-        } else if(body.kind==='column') {
+        } else if(body.kind==='column'||body.kind==='scan-column') {
           if(!Number.isInteger(body.column)||body.column<1||body.column>32)fail('Invalid column.');
           if(db.prepare("SELECT 1 FROM catchall_items WHERE stage='source'").get())fail('Save and sort the source shelves into columns first.');
           const target=state().targetColumn;
-          mode=body.column===target?'target-shelf':'final-shelves';
+          mode=body.kind==='scan-column'?'final-shelves':body.column===target?'target-shelf':'final-shelves';
           if(mode==='target-shelf'&&db.prepare("SELECT 1 FROM catchall_items WHERE stage='column' AND column_no<>?").get(target))fail('Clear the other columns before the target column.');
           items=db.prepare("SELECT * FROM catchall_items WHERE stage='column' AND column_no=? ORDER BY position DESC LIMIT 10").all(body.column);
         } else if(body.kind==='tape') {
@@ -284,14 +298,14 @@ function openStore(filename) {
         const selectedTarget=state().targetShelf;
         const rows=items.map(enrich).map(i=>{
           const dest=shelf(i.album?.final_shelf);
-          if(body.kind==='unassigned'&&!dest)fail('An assigned CD needs a valid final shelf before sorting.');
+          if((body.kind==='unassigned'||body.kind==='scan-sort')&&!dest)fail('An assigned CD needs a valid final shelf before sorting.');
           if(body.kind==='tape'&&dest?.label!==i.shelf_label)fail('A final shelf changed. Correct the catalog before taping this pile.');
-          if(body.kind==='column'&&(!dest||dest.column!==i.column_no))fail('A catalog destination changed. Check this column before continuing.');
+          if((body.kind==='column'||body.kind==='scan-column')&&(!dest||dest.column!==i.column_no))fail('A catalog destination changed. Check this column before continuing.');
           return {
             ...i,
             placement:body.kind==='column'&&dest.label===selectedTarget&&!handoff.primaryDone(db,i.album)?'shelf':'sorted',
             destination:
-              body.kind === 'source' || body.kind === 'unassigned'
+              body.kind === 'source' || body.kind === 'unassigned' || body.kind==='scan-sort'
                 ? (dest?.column || 'Unassigned')
                 : dest.label
           };
@@ -301,8 +315,9 @@ function openStore(filename) {
         if(!b)fail('No batch to confirm.');
         for(const i of b.rows) {
           if(i.album_rowid&&String(album(i.album_rowid)?.barcode||'').trim()!==i.barcode)fail('A barcode assignment changed while this batch was open. Check the catalog before confirming.');
-          if((b.kind==='column'||b.kind==='tape'||b.kind==='tape-existing') && shelf(album(i.album_rowid)?.final_shelf)?.label!==i.destination)fail('A final shelf changed while this batch was open. Restore its catalog destination before confirming.');
-          if(b.kind === 'source') {
+          if((b.kind==='scan-sort'&&b.mode!=='columns'||b.kind==='column'||b.kind==='scan-column'||b.kind==='tape'||b.kind==='tape-existing') && shelf(album(i.album_rowid)?.final_shelf)?.label!==i.destination)fail('A final shelf changed while this batch was open. Restore its catalog destination before confirming.');
+          if(b.kind==='scan-sort'&&b.mode==='columns'&&shelf(album(i.album_rowid)?.final_shelf)?.column!==i.destination)fail('A destination column changed while this batch was open. Restore it before confirming.');
+          if(b.kind === 'source'||b.kind==='scan-sort'&&b.mode==='columns') {
             db.prepare(
               'UPDATE catchall_items SET stage=?,column_no=?,position=? WHERE id=?'
             ).run(
@@ -332,18 +347,21 @@ function openStore(filename) {
             const taped=false; // A primary pass does not imply a review check or secondary tape.
             if(primary)db.prepare(`INSERT INTO catchall_finishing(album_rowid,primary_at,primary_genre) VALUES(?,?,?) ON CONFLICT(album_rowid) DO UPDATE SET primary_at=excluded.primary_at,primary_genre=excluded.primary_genre`).run(i.album_rowid,now,album(i.album_rowid).primary_genre||'');
             captureBaseline(i.album_rowid);
+            db.prepare('DELETE FROM catchall_unknown_locations WHERE album_rowid=?').run(i.album_rowid);
             db.prepare('UPDATE rainbow_albums SET sorted=1,sorted_shelf=?,sorted_at=?,taped=CASE WHEN ? THEN 1 ELSE taped END,taped_at=CASE WHEN ? THEN ? ELSE taped_at END WHERE rowid=?').run(i.destination,now,Number(taped),Number(taped),now,i.album_rowid);
             if(i.id)db.prepare("UPDATE catchall_items SET stage='sorted',sorted_at=?,taped_at=CASE WHEN ? THEN ? ELSE taped_at END WHERE id=?").run(now,Number(taped),now,i.id);
           }
         }
-        if(b.kind==='source')for(const i of b.rows)db.prepare('UPDATE catchall_items SET scan_previous=NULL WHERE id=?').run(i.id);
-        if(b.kind==='source'&&!db.prepare("SELECT 1 FROM catchall_items WHERE source_id=? AND stage='source'").get(b.sourceId))db.prepare("UPDATE catchall_sources SET status='complete' WHERE id=?").run(b.sourceId);
+        if(b.kind==='source'||b.kind==='scan-sort')for(const i of b.rows)db.prepare('UPDATE catchall_items SET scan_previous=NULL WHERE id=?').run(i.id);
+        if((b.kind==='source'||b.kind==='scan-sort')&&!db.prepare("SELECT 1 FROM catchall_items WHERE source_id=? AND stage='source'").get(b.sourceId)){
+          finishSource(b.sourceId);
+        }
         db.prepare('UPDATE catchall_meta SET batch=NULL').run();
       } else if (body.type === 'reconcile') {
         const unresolved = db.prepare(`
           SELECT id, barcode
           FROM catchall_items
-          WHERE stage = 'unassigned'
+          WHERE stage IN ('unassigned','source')
             AND album_rowid IS NULL
           ORDER BY position DESC
         `).all();
@@ -407,7 +425,6 @@ function openStore(filename) {
       db.prepare('UPDATE catchall_meta SET revision=revision+1').run();
       const result=state();
       if(openedSourceId)result.openedSourceId=openedSourceId;
-      if(resetBackup)result.resetBackup=path.basename(resetBackup);
       return result;
     }).immediate();
   }

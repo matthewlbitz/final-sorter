@@ -3,7 +3,7 @@ const {tape,colors}=require('./public/sorting-guide');
 const label=v=>{const m=String(v||'').trim().toUpperCase().match(/^(\d{1,2})([A-Z])$/);return m&&+m[1]>=1&&+m[1]<=32?`${+m[1]}${m[2]}`:null;};
 const assigned=a=>!!String(a.barcode||'').trim();
 const placed=a=>Number(a.sorted)===1&&!!label(a.final_shelf)&&(!a.sorted_shelf||label(a.sorted_shelf)===label(a.final_shelf));
-const trusted=a=>{const s=label(a.new_shelf_label),c=parseInt(s);return s&&!['26P','27P'].includes(s)&&((c>=9&&c<=18)||c===20||(c>=24&&c<=28))?s:null;};
+const trusted=a=>{const s=label(a.new_shelf_label);const c=parseInt(s);return s&&!['26P','27P'].includes(s)&&((c>=9&&c<=18)||c===20||(c>=24&&c<=28))?s:null;};
 const order=(a,b)=>a.localeCompare(b,undefined,{numeric:true});
 function migrate(db,filename){
   if(db.prepare("SELECT 1 FROM sqlite_master WHERE name='catchall_passes'").get())return;
@@ -24,15 +24,16 @@ function snapshot(db){
   const active=db.prepare("SELECT * FROM catchall_items WHERE stage<>'sorted'").all();
   const byId=new Map(active.filter(i=>i.album_rowid).map(i=>[i.album_rowid,i]));
   const byCode=new Map(active.map(i=>[i.barcode,i]));
+  const unknown=new Set(db.prepare('SELECT album_rowid FROM catchall_unknown_locations').all().map(i=>i.album_rowid));
   const albums=db.prepare('SELECT rowid AS catalog_rowid,* FROM rainbow_albums').all().map(a=>{
     const f=finishing.get(a.catalog_rowid),item=byId.get(a.catalog_rowid)||byCode.get(String(a.barcode||'').trim());
     const primary=primaryKnown(a,f),review=!!f?.review_at;
     const secondary=!!f?.secondary_at&&f.secondary_genre===(a.secondary_genre||'');
-    const atFinal=assigned(a)&&placed(a)&&!item;
+    const atFinal=assigned(a)&&placed(a)&&!item&&!unknown.has(a.catalog_rowid);
     let location=null,working=null;
     if(assigned(a)){
       if(item)working=item.stage==='source'?`Source stack ${sources.get(item.source_id)?.label||'?'}`:item.stage==='column'?`Column ${item.column_no} pile`:item.stage==='shelf'?`Shelf ${item.shelf_label} pile`:'Unassigned stack';
-      else location=label(a.sorted_shelf)||(placed(a)?label(a.final_shelf):trusted(a));
+      else if(!unknown.has(a.catalog_rowid))location=label(a.sorted_shelf)||(placed(a)?label(a.final_shelf):trusted(a));
     }
     return {...a,final:label(a.final_shelf),assigned:assigned(a),primary,review,secondary,hasReview:f?.has_review??null,atFinal,finished:atFinal&&primary&&secondary&&review,location,working,visited:passMap.has(label(a.final_shelf)),lateArrival:!!passMap.get(label(a.final_shelf))&&!!a.sorted_at&&a.sorted_at>passMap.get(label(a.final_shelf)).completed_at};
   });
@@ -57,12 +58,12 @@ function markdown(db){
     `| Reviews present / absent | ${count(a=>a.review&&a.hasReview===1)} / ${count(a=>a.review&&a.hasReview===0)} |`,
     `| Fully finished at final shelf | ${count(a=>a.finished)} |`,
     `| Initial shelf passes completed | ${passes.length} |`,
-    `| Coworker queue ready now | ${queue.length} |`,
+    `| Tape follow-up queue ready now | ${queue.length} |`,
     `| Active physical stack CDs (including unknown barcodes) | ${active.length} |`,
     `| Invalid / missing final shelf | ${count(a=>!a.final)} |`,'',
     'Counts describe catalog records, not an audited physical inventory. Primary tape alone is not full completion. Legacy taped flags count as primary tape but never imply a review check. Empty source shelves are not inventoried by this database.','',
-    '## Coworker handoff','',
-    'Initial pass means the first available CDs received primary tape. It does not mean every destined CD has arrived. Scan each ready CD in Coworker handoff to record review presence and confirm both tape positions. Late arrivals need primary tape too unless already recorded.','',
+    '## Tape follow-up handoff','',
+    'Initial pass means the first available CDs received primary tape. It does not mean every destined CD has arrived. Historical tape and review records are retained; no finishing confirmation workflow is available. Late arrivals need primary tape too unless already recorded.','',
     '| Visited target | Initial pass (UTC) | Ready now | Need primary | Need review | Need secondary check | Still elsewhere / unassigned | Finished |',
     '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |'];
   for(const p of passes){const all=albums.filter(a=>a.final===p.shelf),q=queue.filter(a=>a.final===p.shelf);lines.push(`| ${p.shelf} | ${p.completed_at} | ${q.length} | ${q.filter(a=>!a.primary).length} | ${q.filter(a=>!a.review).length} | ${q.filter(a=>!a.secondary).length} | ${all.filter(a=>!a.atFinal).length} | ${all.filter(a=>a.finished).length} |`);}
@@ -70,7 +71,7 @@ function markdown(db){
   lines.push('','### Ready CDs','', '| Shelf | Barcode | Artist — album | Primary tape | Secondary tape | Review | Arrival |','| --- | --- | --- | --- | --- | --- | --- |');
   for(const a of queue)lines.push(`| ${a.final} | ${esc(a.barcode)} | ${esc(a.artist)} — ${esc(a.title)} | ${a.primary?'Done':esc(tape(a.primary_genre)?.color||'Check genre')} | ${a.secondary?'Done':esc(tape(a.secondary_genre)?.color||'None; confirm')} | ${a.review?(a.hasReview?'Present':'Absent'):'Check'} | ${a.lateArrival?'After initial pass':'Initial / date unknown'} |`);
   lines.push('','## Every target shelf: current location query','',
-    'Each list includes assigned CDs at confirmed physical shelves (including finished CDs) and unsorted CDs in trusted old shelves: columns 9–18, 20, 24–28. Unassigned CDs and broad/jumbled areas are excluded. Working stacks override shelf estimates and are listed separately. These are catalog-based predictions, not physical guarantees. Counts after each shelf show matching CDs.','',
+    'Each list includes assigned CDs at confirmed physical shelves (including finished CDs) and unsorted CDs at catalog source shelf labels. Unassigned CDs and broad/jumbled areas are excluded. Working stacks override shelf estimates and are listed separately. These are catalog-based predictions, not physical guarantees. Counts after each shelf show matching CDs.','',
     '| Target: [shelves] | Counts by location | Total | Unassigned | Excluded / unknown | In stacks | At final | Primary | Fully finished | Initial pass |',
     '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |');
   for(const s of shelves){const all=albums.filter(a=>a.final===s),locations=[...new Set(all.map(a=>a.location).filter(Boolean))].sort(order);lines.push(`| ${s}: [${locations.join(', ')}] | ${breakdown(all.map(a=>a.location).filter(Boolean))} | ${all.length} | ${all.filter(a=>!a.assigned).length} | ${all.filter(a=>a.assigned&&!a.location&&!a.working).length} | ${all.filter(a=>a.working).length} | ${all.filter(a=>a.atFinal).length} | ${all.filter(a=>a.primary).length} | ${all.filter(a=>a.finished).length} | ${passes.find(p=>p.shelf===s)?.completed_at||'Not yet'} |`);}

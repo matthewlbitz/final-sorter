@@ -54,12 +54,13 @@ function finalShelf(item) {
   return match && +match[1] >= 1 && +match[1] <= 32 ? `${+match[1]}${match[2]}` : null;
 }
 // Highlight physical neighbors only; never regroup or reorder the stack.
-function shelfRuns(rows) {
+function shelfRuns(rows, pass="shelf") {
+  const destination=row=>{const shelf=finalShelf(row);return pass==="column"&&shelf?String(parseInt(shelf)):shelf;};
   const runs = [];
   for (let start = 0; start < rows.length;) {
-    const label = finalShelf(rows[start]);
+    const label = destination(rows[start]);
     let end = start + 1;
-    while (label && end < rows.length && finalShelf(rows[end]) === label) end++;
+    while (label && end < rows.length && destination(rows[end]) === label) end++;
     runs.push({start, end, shelf: label, count: end - start});
     start = end;
   }
