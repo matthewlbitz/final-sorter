@@ -129,7 +129,7 @@ function renderStack(){
   if(!items.length){button('Continue',()=>go({type:'home'})).focus();return;}
   const direct=source&&state.sources.find(s=>s.id===view.id)?.label.startsWith('Scan & Sort ');
   if(direct){
-    el('p','Top CD first · place each CD on its final shelf. Placement is saved only after you confirm each batch. CDs without a valid shelf go to the Set aside pile.');
+    el('p','Top CD first · place each CD on its final shelf. Placement is saved only after you confirm each batch. CDs without a valid shelf go to Set aside and leave this sorter when confirmed.');
     button('Refresh assignments',async()=>{await action('reconcile');render();},screen,true);
     button('Sort this stack',async()=>{await action('batch',{kind:'scan-sort',sourceId:view.id});render();}).focus();return;
   }

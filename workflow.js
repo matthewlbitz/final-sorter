@@ -321,7 +321,9 @@ function openStore(filename) {
           if(i.album_rowid&&String(album(i.album_rowid)?.barcode||'').trim()!==i.barcode)fail('A barcode assignment changed while this batch was open. Check the catalog before confirming.');
           if(i.placement==='set-aside') {
             if(shelf(album(i.album_rowid)?.final_shelf))fail(`CD ${i.barcode} now has a final shelf. Refresh this batch before confirming.`);
-            db.prepare("UPDATE catchall_items SET stage='unassigned',column_no=NULL,shelf_label=NULL,position=?,sorted_at=NULL WHERE id=?").run(seq(),i.id);
+            // The station handles this physical pile outside Final Sorter.
+            db.prepare('DELETE FROM catchall_assignments WHERE item_id=?').run(i.id);
+            db.prepare('DELETE FROM catchall_items WHERE id=?').run(i.id);
             if(i.album_rowid)db.prepare('UPDATE rainbow_albums SET sorted=0,sorted_shelf=NULL,sorted_at=NULL WHERE rowid=?').run(i.album_rowid);
             continue;
           }
