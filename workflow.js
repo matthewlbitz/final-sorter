@@ -118,12 +118,17 @@ function openStore(filename) {
             }
           }
   }
+  // Resolve the selected shelf without building the full catalog response.
+  const targetShelfFor=(m,shelves)=>shelf(m.target_shelf)?.label||shelves.find(v=>shelf(v).column===shelf(m.range_end)?.column)||shelves[0]||'32A';
+  const selectedTargetShelf=()=>targetShelfFor(meta(),[...new Set(db.prepare('SELECT DISTINCT final_shelf FROM rainbow_albums').all().map(a=>shelf(a.final_shelf)?.label).filter(Boolean))].sort((a,b)=>shelf(b).rank-shelf(a).rank));
+  const stateFields=['id','barcode','artist','title','final_shelf','new_shelf_label','assigned_at','primary_genre','secondary_genre','sorted','taped','scanned_at','sorted_at','taped_at','sorted_shelf'];
+  const catalogColumns=new Set(db.prepare('PRAGMA table_info(rainbow_albums)').all().map(c=>c.name));
+  const stateAlbums=db.prepare('SELECT rowid AS catalog_rowid,'+stateFields.filter(c=>catalogColumns.has(c)).join(',')+' FROM rainbow_albums');
   function state() {
     const m=meta(), items=allItems(), sources=db.prepare('SELECT * FROM catchall_sources ORDER BY id DESC').all();
-    const albums=db.prepare('SELECT rowid AS catalog_rowid,* FROM rainbow_albums').all();
+    const albums=stateAlbums.all();
     const shelves=[...new Set(albums.map(a=>shelf(a.final_shelf)?.label).filter(Boolean))].sort((a,b)=>shelf(b).rank-shelf(a).rank);
-    const oldColumn=shelf(m.range_end)?.column;
-    const targetShelf=shelf(m.target_shelf)?.label||shelves.find(v=>shelf(v).column===oldColumn)||shelves[0]||'32A';
+    const targetShelf=targetShelfFor(m,shelves);
     const targetColumn=shelf(targetShelf).column;
     const activeByAlbum=new Map(items.filter(i=>i.album_rowid&&i.stage!=='sorted').map(i=>[i.album_rowid,i]));
     // External barcode assignments are immediately recognized for location prediction, even before Refresh assignments.
@@ -277,7 +282,7 @@ function openStore(filename) {
             mode = 'columns';
         } else if(body.kind==='column'||body.kind==='scan-column') {
           if(!Number.isInteger(body.column)||body.column<1||body.column>32)fail('Invalid column.');
-          const target=state().targetColumn;
+          const target=shelf(selectedTargetShelf()).column;
           mode=body.kind==='scan-column'?'final-shelves':body.column===target?'target-shelf':'final-shelves';
           if(mode==='target-shelf'&&db.prepare("SELECT 1 FROM catchall_items WHERE stage='column' AND column_no<>?").get(target))fail('Clear the other columns before the target column.');
           items=db.prepare("SELECT * FROM catchall_items WHERE stage='column' AND column_no=? ORDER BY position DESC LIMIT 10").all(body.column);
@@ -294,19 +299,19 @@ function openStore(filename) {
           mode='tape-section';
         } else fail('Invalid batch type');
         if(!items.length)fail('Stack is empty.');
-        const selectedTarget=state().targetShelf;
+        const selectedTarget=selectedTargetShelf();
         const rows=items.map(enrich).map(i=>{
           const dest=shelf(i.album?.final_shelf);
-          if((body.kind==='unassigned'||body.kind==='scan-sort')&&!dest)fail(`CD ${i.barcode} needs a valid final shelf before sorting.`);
+          if(body.kind==='unassigned'&&!dest)fail(`CD ${i.barcode} needs a valid final shelf before sorting.`);
           if(body.kind==='tape'&&dest?.label!==i.shelf_label)fail('A final shelf changed. Correct the catalog before taping this pile.');
-          if((body.kind==='column'||body.kind==='scan-column')&&(!dest||dest.column!==i.column_no))fail(`CD ${i.barcode} has an invalid final shelf or a destination outside column ${i.column_no}. Check its catalog destination before continuing.`);
+          if((body.kind==='column'||body.kind==='scan-column')&&dest&&dest.column!==i.column_no)fail(`CD ${i.barcode} has an invalid final shelf or a destination outside column ${i.column_no}. Check its catalog destination before continuing.`);
           return {
             ...i,
-            placement:body.kind==='column'&&dest.label===selectedTarget&&!handoff.primaryDone(db,i.album)?'shelf':'sorted',
+            placement:!dest?'set-aside':body.kind==='column'&&dest.label===selectedTarget&&!handoff.primaryDone(db,i.album)?'shelf':'sorted',
             destination:
               body.kind === 'source' || body.kind === 'unassigned' || body.kind==='scan-sort'
                 ? (dest?.column || 'Unassigned')
-                : dest.label
+                : (dest?.label || 'Unassigned')
           };
         });
         db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:body.kind,mode,sourceId:body.sourceId,column:body.column,shelf:body.shelf,rows}));
@@ -314,6 +319,12 @@ function openStore(filename) {
         if(!b)fail('No batch to confirm.');
         for(const i of b.rows) {
           if(i.album_rowid&&String(album(i.album_rowid)?.barcode||'').trim()!==i.barcode)fail('A barcode assignment changed while this batch was open. Check the catalog before confirming.');
+          if(i.placement==='set-aside') {
+            if(shelf(album(i.album_rowid)?.final_shelf))fail(`CD ${i.barcode} now has a final shelf. Refresh this batch before confirming.`);
+            db.prepare("UPDATE catchall_items SET stage='unassigned',column_no=NULL,shelf_label=NULL,position=?,sorted_at=NULL WHERE id=?").run(seq(),i.id);
+            if(i.album_rowid)db.prepare('UPDATE rainbow_albums SET sorted=0,sorted_shelf=NULL,sorted_at=NULL WHERE rowid=?').run(i.album_rowid);
+            continue;
+          }
           if((b.kind==='scan-sort'&&b.mode!=='columns'||b.kind==='column'||b.kind==='scan-column'||b.kind==='tape'||b.kind==='tape-existing') && shelf(album(i.album_rowid)?.final_shelf)?.label!==i.destination)fail('A final shelf changed while this batch was open. Restore its catalog destination before confirming.');
           if(b.kind==='scan-sort'&&b.mode==='columns'&&shelf(album(i.album_rowid)?.final_shelf)?.column!==i.destination)fail('A destination column changed while this batch was open. Restore it before confirming.');
           if(b.kind === 'source'||b.kind==='scan-sort'&&b.mode==='columns') {

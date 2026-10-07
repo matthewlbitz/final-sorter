@@ -66,7 +66,7 @@ function render(){
   const shelves=[...new Set(state.items.filter(i=>i.stage==='shelf').map(i=>i.shelf_label))];
   if(shelves.length){el('h2','Shelf piles · ready to tape');for(const shelf of shelves)button(shelf,()=>go({type:'shelf',shelf}),screen,true);}
   const unknown=state.items.filter(i=>i.stage==='unassigned').length;
-  if(unknown)button(`Unassigned · ${unknown}`,()=>go({type:'unassigned'}),screen,true);
+  if(unknown)button(`Set aside · ${unknown}`,()=>go({type:'unassigned'}),screen,true);
   if(scanOnly&&state.sources.some(s=>s.status!=='complete'&&!s.label.startsWith('Scan & Sort ')))button(`Resume target shelf ${state.targetShelf}`,()=>{selectedTarget=state.targetShelf;scanOnly=false;predictionQueue=[];render();},screen,true);
   if(!selectedTarget&&!scanOnly){
     for(const source of state.sources.filter(s=>s.status!=='complete')){
@@ -129,7 +129,7 @@ function renderStack(){
   if(!items.length){button('Continue',()=>go({type:'home'})).focus();return;}
   const direct=source&&state.sources.find(s=>s.id===view.id)?.label.startsWith('Scan & Sort ');
   if(direct){
-    el('p','Top CD first · place each CD on its final shelf. Placement is saved only after you confirm each batch. Unknown barcodes or invalid destinations must be corrected in Shelf Lookup before sorting.');
+    el('p','Top CD first · place each CD on its final shelf. Placement is saved only after you confirm each batch. CDs without a valid shelf go to the Set aside pile.');
     button('Refresh assignments',async()=>{await action('reconcile');render();},screen,true);
     button('Sort this stack',async()=>{await action('batch',{kind:'scan-sort',sourceId:view.id});render();}).focus();return;
   }
@@ -158,12 +158,12 @@ function renderBatch(){
   el(
     'p',
     columns
-      ? 'Top CD first · place each CD on top of its destination column pile'
+      ? 'Top CD first · place each CD on its destination column pile, or in Set aside'
       : b.mode === 'target-shelf'
         ? 'Top CD first · target CDs go to the tape pile; all others go to final shelves'
         : b.mode === 'shelf-piles'
         ? 'Top CD first · place onto labeled shelf piles · tape later'
-        : 'Top CD first · place in the final shelves'
+        : 'Top CD first · place in the final shelves, or in Set aside'
   );
   const output=el('div');output.className='batch-output';
   for(const group of SortingGuide.shelfRuns(b.rows,columns?'column':'shelf')) {
@@ -174,8 +174,8 @@ function renderBatch(){
       const i=b.rows[index], row=el('div',undefined,wrap);row.className='batch-row';
       el('div',String(index+1).padStart(2,'0'),row).className='batch-number';
       const dest=el('div',undefined,row);dest.className='batch-shelf';
-      el('span',columns?'COLUMN':i.placement==='shelf'||b.mode==='shelf-piles'?'TAPE PILE':'FINAL SHELF',dest).className='eyebrow';
-      el('strong',String(i.destination),dest);
+      el('span',i.placement==='set-aside'?'SET ASIDE':columns?'COLUMN':i.placement==='shelf'||b.mode==='shelf-piles'?'TAPE PILE':'FINAL SHELF',dest).className='eyebrow';
+      el('strong',i.placement==='set-aside'?'Set aside':String(i.destination),dest);
       const detail=el('div',undefined,row);detail.className='batch-detail';
       el('strong',i.album?`${i.album.artist||''} — ${i.album.title||''}`:'Unassigned',detail);
       el('small',i.barcode,detail);
@@ -248,21 +248,21 @@ function renderUnassigned() {
     return render();
   }
 
-  const unresolved = items.filter(i => !i.album);
+  const unresolved = items.filter(i => !SortingGuide.finalShelf(i));
   const assignedCount = items.length - unresolved.length;
 
-  el('span', 'UNASSIGNED STACK', screen).className = 'eyebrow';
+  el('span', 'SET ASIDE PILE', screen).className = 'eyebrow';
   el('h2', `${items.length} CDs`);
 
   el(
     'p',
-    `${assignedCount} / ${items.length} assigned`
+    `${assignedCount} / ${items.length} ready to sort`
   );
 
   if (unresolved.length) {
     el(
       'p',
-      `${unresolved.length} still need to be assigned in Shelf Lookup. Keep the physical stack together and in order.`
+      `${unresolved.length} need an album assignment or valid final shelf in Shelf Lookup. Keep the physical stack together and in order.`
     );
 
     button(
@@ -287,7 +287,7 @@ function renderUnassigned() {
 }
 
 function renderAssignedUnassigned(items) {
-  el('span', 'UNASSIGNED STACK', screen).className = 'eyebrow';
+  el('span', 'SET ASIDE PILE', screen).className = 'eyebrow';
   el('h2', `${items.length} CDs assigned`);
 
   el(

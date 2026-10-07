@@ -19,12 +19,13 @@ function fixture(){
   f.restart=()=>{f.store.db.close();f.store=openStore(file);};
   f.close=()=>{f.store.db.close();fs.rmSync(dir,{recursive:true,force:true});};
   f.source=(label,codes)=>{const state=f.act('source',{label});const sourceId=state.openedSourceId;for(const barcode of codes)f.act('scan',{sourceId,barcode});f.act('save',{sourceId});while(f.store.state().items.some(i=>i.stage==='source'&&i.source_id===sourceId)){f.act('batch',{kind:'source',sourceId});f.act('confirm');}return sourceId;};
+  f.columns=()=>{for(const column of [...new Set(f.store.state().items.filter(i=>i.stage==='column').map(i=>i.column_no))])while(f.store.state().items.some(i=>i.stage==='column'&&i.column_no===column)){f.act('batch',{kind:'scan-column',column});f.act('confirm');}};
   return f;
 }
-test('exact target shelf predictions follow all area rules and exclude unassigned albums',()=>{
+test('target shelf predicts only trusted source areas and excludes unassigned albums',()=>{
  const f=fixture();try{
  const s=f.act('target',{shelf:'32L'});assert.equal(s.total,11);assert.equal(s.remaining,10);assert.equal(s.excludedUnassigned,1);
- const expected={'shelf-9A':1,'shelf-18B':1,'shelf-20C':1,'shelf-24D':1,'shelf-28E':1};
+ const expected=Object.fromEntries(['9A','18B','20C','24D','28E'].map(s=>['shelf-'+s,1]));
  assert.deepEqual(Object.fromEntries(s.recommendations.map(r=>[r.key,r.count])),expected);
  assert(!s.recommendations.some(r=>r.key==='unassigned-29-32'));
  assert.equal(estimatedLocation({barcode:null,new_shelf_label:'9A'}),null);
@@ -86,8 +87,6 @@ test('sorted catalog flags are recognized without a workflow item and tape-at-sh
  f.act('target',{shelf:'32L'});f.store.db.exec("UPDATE rainbow_albums SET sorted=1 WHERE id IN (1,2); UPDATE rainbow_albums SET taped=1 WHERE id=2");
  assert.equal(f.store.state().alreadyShelved.length,1);assert.equal(f.store.state().complete,1);
  f.act('tape-existing',{barcode:'T1'});f.act('confirm');assert.equal(f.store.state().complete,2);assert.equal(f.store.state().items.length,0);
- // Reset must restore the pre-existing placement flag, not erase catalog history.
- f.act('reset',{confirmation:'RESET'});assert.equal(f.read('T1').sorted,1);assert.equal(f.read('T1').taped,0);assert.equal(f.read('T2').taped,1);
  }finally{f.close();}
 });
 test('finished CDs can be scanned again; removing the scan restores their immediately previous confirmed location',()=>{
@@ -108,16 +107,6 @@ test('changed destinations, changed tape combinations and stale confirmations ca
  f.store.db.exec("UPDATE rainbow_albums SET final_shelf='32K' WHERE id=1");f.act('target',{shelf:'32K'});assert(f.store.state().recommendations.some(r=>r.label==='Shelf 32L'));
  }finally{f.close();}
 });
-test('reset backs up state and restores only workflow tracking, preserving assignments and catalog content',()=>{
- const f=fixture();try{
- f.act('target',{shelf:'32L'});const before=f.store.db.prepare('SELECT * FROM rainbow_albums').all();
- f.source('9A',['T1','OTHER']);f.act('batch',{kind:'column',column:32});f.act('confirm');
- assert.throws(()=>f.act('reset',{confirmation:'no'}),/Type RESET/);const prior=f.store.state();
- const result=f.act('reset',{confirmation:'RESET'});assert.equal(result.items.length,0);assert.equal(result.sources.length,0);assert.deepEqual(f.store.db.prepare('SELECT * FROM rainbow_albums').all(),before);
- const backup=new Database(path.join(f.dir,'backups',result.resetBackup),{readonly:true});assert.equal(backup.prepare('SELECT count(*) n FROM catchall_items').get().n,2);backup.close();
- assert.throws(()=>f.store.action({type:'reset',revision:prior.revision,confirmation:'RESET'}),/State changed/);
- }finally{f.close();}
-});
 test('legacy v2 migration preserves active batch/order and imports confirmed sorted records without inventing tape',()=>{
  const f=fixture();try{
  f.act('target',{shelf:'32L'});f.source('9A',['REMOTE']);f.act('batch',{kind:'column',column:9});f.act('confirm');
@@ -130,29 +119,6 @@ test('legacy v2 migration preserves active batch/order and imports confirmed sor
  }finally{f.close();}
 });
 
-test('initial pass, late arrivals, coworker review and tape confirmation survive restart and reset',()=>{
- const f=fixture();try{
- f.act('target',{shelf:'32K'});
- assert.throws(()=>f.act('initial-pass'),/Finish the predicted/);
- f.source('9A',['OTHER']);f.act('batch',{kind:'column',column:32});f.act('confirm');
- assert.throws(()=>f.act('initial-pass'),/Finish the predicted/);
- f.act('batch',{kind:'tape',shelf:'32K'});f.act('confirm');
- assert.equal(f.read('OTHER').taped,0);
- f.act('initial-pass');f.restart();
- let h=f.store.state().handoff;assert.equal(h.passes.length,1);assert.equal(h.queue.length,1);assert(h.queue[0].primary);assert(!h.queue[0].review);
- f.store.db.exec("UPDATE rainbow_albums SET final_shelf='32K',sorted=1,sorted_shelf='32K',sorted_at='2099-01-01' WHERE barcode='T1'");
- h=f.store.state().handoff;assert.equal(h.queue.length,2);assert(h.queue.find(a=>a.barcode==='T1').lateArrival);assert(!h.queue.find(a=>a.barcode==='T1').primary);
- assert.throws(()=>f.act('coworker-finish',{barcode:'OTHER'}),/Confirm primary/);
- f.act('coworker-finish',{barcode:'OTHER',hasReview:false,primaryConfirmed:true,secondaryConfirmed:true});
- assert.equal(f.read('OTHER').taped,1);assert.equal(f.store.state().handoff.queue.length,1);
- f.act('coworker-finish',{barcode:'T1',hasReview:true,primaryConfirmed:true,secondaryConfirmed:true});
- assert.equal(f.store.state().handoff.queue.length,0);
- const report=f.store.report();assert.match(report,/Reviews present \/ absent \| 1 \/ 1/);assert.match(report,/32K: \[32K\]/);
- f.store.db.exec("UPDATE rainbow_albums SET secondary_genre='Jazz' WHERE barcode='OTHER'");
- assert.equal(f.store.state().handoff.queue.length,1);assert(!f.store.state().handoff.queue[0].secondary);
- f.act('reset',{confirmation:'RESET'});assert.equal(f.store.state().handoff.passes.length,0);assert.equal(f.store.db.prepare('SELECT COUNT(*) n FROM catchall_finishing').get().n,0);
- }finally{f.close();}
-});
 test('report is read-only, escapes catalog markup, covers every shelf and separates working locations',()=>{
  const f=fixture();try{
  f.store.db.exec("UPDATE rainbow_albums SET primary_genre='Rock|<b> & Jazz' WHERE barcode='T3'");
@@ -164,17 +130,83 @@ test('report is read-only, escapes catalog markup, covers every shelf and separa
  report=f.store.report();assert.match(report,/32L: \[18B, 20C, 24D, 28E\]/);assert.match(report,/Source stack 9A/);
  }finally{f.close();}
 });
-test('coworker finishing can proceed during an unrelated sorting batch without losing its order',()=>{
+
+test('Scan & Sort persists ten-CD batches, order and placement without changing target or inventing tape',()=>{
  const f=fixture();try{
- f.act('target',{shelf:'32K'});
- f.store.db.exec("UPDATE rainbow_albums SET sorted=1,sorted_shelf='32K',taped=1 WHERE barcode='OTHER'");
- f.act('initial-pass');
- f.act('target',{shelf:'32L'});f.source('9A',['T3']);
- const batch=f.act('batch',{kind:'column',column:32}).batch;
- const oldRevision=f.store.state().revision;
- f.act('coworker-finish',{barcode:'OTHER',hasReview:true,primaryConfirmed:true,secondaryConfirmed:true});
- assert.deepEqual(f.store.state().batch,batch);
- assert.throws(()=>f.store.action({type:'confirm',revision:oldRevision}),/State changed/);
- f.act('confirm');assert.equal(f.store.state().items.find(i=>i.barcode==='T3').stage,'shelf');
+ const target=f.store.state().targetShelf;
+ const sourceId=f.act('scan-sort').openedSourceId;
+ const codes=['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','OTHER','REMOTE'];
+ for(const barcode of codes)f.act('scan',{sourceId,barcode});
+ assert.throws(()=>f.act('scan',{sourceId,barcode:'T1'}),/already in/);
+ assert.equal(f.read('T1').sorted,0);f.act('save',{sourceId});
+ assert.throws(()=>f.act('batch',{kind:'source',sourceId}),/Use Scan & Sort/);
+ let b=f.act('batch',{kind:'scan-sort',sourceId}).batch;
+ assert.deepEqual(b.rows.map(i=>i.barcode),codes.slice(2).reverse());assert.equal(b.rows.length,10);
+ assert.equal(b.mode,'columns');assert.equal(b.rows[0].destination,9);assert.equal(b.rows[1].destination,32);
+ f.restart();assert.deepEqual(f.store.state().batch,b);
+ const revision=f.store.state().revision;f.act('confirm');
+ assert.throws(()=>f.store.action({type:'confirm',revision}),/State changed/);
+ b=f.act('batch',{kind:'scan-sort',sourceId}).batch;assert.deepEqual(b.rows.map(i=>i.barcode),['T2','T1']);
+ f.store.db.exec("UPDATE rainbow_albums SET final_shelf='9A' WHERE barcode='T1'");
+ assert.throws(()=>f.act('confirm'),/destination column changed/);assert.equal(f.read('T2').sorted,0);
+ f.store.db.exec("UPDATE rainbow_albums SET final_shelf='32L' WHERE barcode='T1'");f.act('confirm');f.restart();
+ assert.equal(f.store.state().targetShelf,target);assert.equal(f.store.state().sources.find(s=>s.id===sourceId).status,'complete');
+ assert(codes.every(code=>f.read(code).sorted===0));
+ const columnBatch=f.act('batch',{kind:'scan-column',column:32}).batch;assert.deepEqual(columnBatch.rows.map(i=>i.barcode),['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10']);assert.equal(columnBatch.rows[0].destination,'32L');f.act('confirm');f.columns();
+ for(const barcode of codes){const a=f.read(barcode);assert.equal(a.sorted,1);assert.equal(a.sorted_shelf,a.final_shelf);assert(a.scanned_at&&a.sorted_at);assert.equal(a.taped,0);}
+ f.act('target',{shelf:'32L'});assert.equal(f.store.state().recommendations.length,0);assert.equal(f.store.state().alreadyShelved.length,10);
+ const report=f.store.report();assert.match(report,/32L: \[32L\]/);
+ }finally{f.close();}
+});
+test('Scan & Sort sets unresolved CDs aside and removed actions cannot mutate the DB',()=>{
+ const f=fixture();try{
+ const sourceId=f.act('scan-sort').openedSourceId;f.act('scan',{sourceId,barcode:'UNKNOWN'});f.act('save',{sourceId});
+ const aside=f.act('batch',{kind:'scan-sort',sourceId}).batch;assert.equal(aside.rows[0].placement,'set-aside');f.act('confirm');
+ f.store.db.prepare("UPDATE rainbow_albums SET barcode='UNKNOWN' WHERE id=11").run();
+ f.act('reconcile');assert(f.read('UNKNOWN').scanned_at);
+ f.act('batch',{kind:'unassigned'});f.act('confirm');assert.equal(f.read('UNKNOWN').sorted,0);f.columns();assert.equal(f.read('UNKNOWN').sorted,1);
+ const before=f.store.db.prepare('SELECT * FROM rainbow_albums').all();const revision=f.store.state().revision;
+ assert.throws(()=>f.act('reset',{confirmation:'RESET'}),/Unknown action/);
+ assert.throws(()=>f.act('coworker-finish',{}),/Unknown action/);
+ assert.deepEqual(f.store.db.prepare('SELECT * FROM rainbow_albums').all(),before);assert.equal(f.store.state().revision,revision);
+ }finally{f.close();}
+});
+
+test('clear unfinished stacks cancels open batch, restores source predictions and preserves confirmed work',()=>{
+ const f=fixture();try{
+ let sourceId=f.act('scan-sort').openedSourceId;
+ f.act('scan',{sourceId,barcode:'T1'});f.act('save',{sourceId});f.act('batch',{kind:'scan-sort',sourceId});f.act('confirm');f.columns();
+ const confirmed=f.read('T1');
+ sourceId=f.act('scan-sort').openedSourceId;f.act('scan',{sourceId,barcode:'T3'});f.act('save',{sourceId});f.act('batch',{kind:'scan-sort',sourceId});
+ const revision=f.store.state().revision;f.act('clear-stacks');
+ assert.equal(f.store.state().batch,null);assert(!f.store.state().items.some(i=>i.stage!=='sorted'));assert.deepEqual(f.read('T1'),confirmed);
+ assert.equal(f.store.state().recommendations.find(r=>r.label==='Shelf 9A').count,1);
+ assert.throws(()=>f.store.action({type:'confirm',revision}),/State changed/);
+ f.restart();assert.equal(f.store.state().batch,null);assert.equal(f.read('T1').sorted,1);
+ }finally{f.close();}
+});
+
+test('emptying a source invalidates unobserved catalog locations, including CDs destined for it',()=>{
+ const f=fixture();try{
+ f.act('target',{shelf:'32L'});
+ f.source('9A',['T3']);
+ const s=f.store.state();assert(!s.recommendations.some(r=>r.label==='Shelf 9A'));
+ assert.equal(f.store.db.prepare('SELECT count(*) n FROM catchall_unknown_locations').get().n,2);
+ f.restart();assert(!f.store.state().recommendations.some(r=>r.label==='Shelf 9A'));
+ f.act('batch',{kind:'column',column:32});f.act('confirm');f.act('batch',{kind:'tape',shelf:'32L'});f.act('confirm');
+ f.act('target',{shelf:'9A'});assert.equal(f.store.state().alreadyShelved.length,0);assert.equal(f.store.state().unavailable,1);
+ // A new scan finds the CD; confirmed placement restores its known location.
+ const sourceId=f.act('scan-sort').openedSourceId;f.act('scan',{sourceId,barcode:'REMOTE'});f.act('save',{sourceId});f.act('batch',{kind:'scan-sort',sourceId});f.act('confirm');f.columns();
+ assert.equal(f.store.state().alreadyShelved.length,1);
+ assert(!f.store.db.prepare('SELECT 1 FROM catchall_unknown_locations WHERE album_rowid=?').get(f.read('REMOTE').catalog_rowid));
+ }finally{f.close();}
+});
+
+test('confirmed placements in broad areas remain known while old labels are unknown',()=>{
+ const f=fixture();try{
+ f.act('target',{shelf:'32L'});f.store.db.exec("UPDATE rainbow_albums SET sorted_shelf='19A',sorted=1 WHERE barcode='T1'");
+ assert(f.store.state().recommendations.some(r=>r.label==='Shelf 19A'&&r.count===1));
+ assert.equal(estimatedLocation({barcode:'x',new_shelf_label:'21A'}),null);
+ assert.match(f.store.report(),/32L: \[9A, 18B, 19A, 20C, 24D, 28E\]/);
  }finally{f.close();}
 });
