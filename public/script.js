@@ -135,7 +135,6 @@ function renderStack(){
   }
   const directColumn=!source&&items.every(i=>state.sources.find(s=>s.id===i.source_id)?.label.startsWith('Scan & Sort '));
   const target=!directColumn&&!source&&view.column===state.targetColumn;
-  if(!source&&state.items.some(i=>i.stage==='source')){el('p','Finish scanning and sorting the source shelves first.');button('Back to saved work',()=>go({type:'home'}));return;}
   if(target&&state.items.some(i=>i.stage==='column'&&i.column_no!==state.targetColumn)){el('p','Clear the other column stacks first.');button('Back to columns',()=>go({type:'home'}));return;}
   el('p',source?'Pick up from the top. Place each CD on top of its destination pile.':target?`Put CDs for ${state.targetShelf} on its tape pile. Place the rest in final shelves.`:'Place each CD in its final shelf. No taping in this step.');
   button(source?'Sort into columns':target?'Sort target pile & final shelves':'Sort into final shelves',async()=>{await action('batch',{kind:source?'source':directColumn?'scan-column':'column',sourceId:view.id,column:view.column});render();}).focus();

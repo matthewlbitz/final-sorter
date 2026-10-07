@@ -277,7 +277,6 @@ function openStore(filename) {
             mode = 'columns';
         } else if(body.kind==='column'||body.kind==='scan-column') {
           if(!Number.isInteger(body.column)||body.column<1||body.column>32)fail('Invalid column.');
-          if(db.prepare("SELECT 1 FROM catchall_items WHERE stage='source'").get())fail('Save and sort the source shelves into columns first.');
           const target=state().targetColumn;
           mode=body.kind==='scan-column'?'final-shelves':body.column===target?'target-shelf':'final-shelves';
           if(mode==='target-shelf'&&db.prepare("SELECT 1 FROM catchall_items WHERE stage='column' AND column_no<>?").get(target))fail('Clear the other columns before the target column.');
@@ -298,9 +297,9 @@ function openStore(filename) {
         const selectedTarget=state().targetShelf;
         const rows=items.map(enrich).map(i=>{
           const dest=shelf(i.album?.final_shelf);
-          if((body.kind==='unassigned'||body.kind==='scan-sort')&&!dest)fail('An assigned CD needs a valid final shelf before sorting.');
+          if((body.kind==='unassigned'||body.kind==='scan-sort')&&!dest)fail(`CD ${i.barcode} needs a valid final shelf before sorting.`);
           if(body.kind==='tape'&&dest?.label!==i.shelf_label)fail('A final shelf changed. Correct the catalog before taping this pile.');
-          if((body.kind==='column'||body.kind==='scan-column')&&(!dest||dest.column!==i.column_no))fail('A catalog destination changed. Check this column before continuing.');
+          if((body.kind==='column'||body.kind==='scan-column')&&(!dest||dest.column!==i.column_no))fail(`CD ${i.barcode} has an invalid final shelf or a destination outside column ${i.column_no}. Check its catalog destination before continuing.`);
           return {
             ...i,
             placement:body.kind==='column'&&dest.label===selectedTarget&&!handoff.primaryDone(db,i.album)?'shelf':'sorted',
