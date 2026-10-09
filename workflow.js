@@ -180,7 +180,7 @@ function openStore(filename) {
       const m=meta();
       if(body.revision!==m.revision)fail('State changed. Refresh and check the current stack.');
       const b=m.batch?JSON.parse(m.batch):null;
-      if(b&&body.type!=='confirm'&&body.type!=='clear-stacks'&&body.type!=='cancel-tape')fail('Finish the displayed 10 CDs before changing stacks.');
+      if(b&&body.type!=='confirm'&&body.type!=='clear-stacks'&&body.type!=='cancel-tape'&&body.type!=='target')fail('Finish the displayed 10 CDs before changing stacks.');
       const source=()=>db.prepare('SELECT * FROM catchall_sources WHERE id=?').get(body.sourceId)||fail('Source not found');
       if(body.type==='cancel-tape'){
         if(!b||!['tape','tape-existing','tape-secondary'].includes(b.kind))fail('No tape instructions to close.');
@@ -203,7 +203,6 @@ function openStore(filename) {
       } else if(body.type==='target'){
         const target=shelf(body.shelf);
         if(!target||!state().shelves.includes(target.label))fail('Choose a populated final shelf.');
-        if(db.prepare("SELECT 1 FROM catchall_items WHERE stage IN ('source','column','unassigned')").get())fail('Finish the current source and column stacks before changing the target shelf.');
         db.prepare('UPDATE catchall_meta SET target_shelf=?,range_start=?,range_end=?').run(target.label,target.label,target.label);
       } else if(body.type==='range'){
         fail('Choose a target shelf instead. Refresh this page.');
@@ -266,6 +265,7 @@ function openStore(filename) {
         db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:'tape-existing',shelf:target,rows:[{id:existing?.id,album_rowid:a.catalog_rowid,barcode:code,album:a,destination:target}]}));
       } else if(body.type==='batch') {
         let items, mode;
+        const batchTarget=shelf(body.targetShelf)?.label||selectedTargetShelf();
         if(body.kind==='scan-sort') {
           const s=source();if(s.status!=='saved'||!s.label.startsWith('Scan & Sort '))fail('Finish scanning this Scan & Sort stack first.');
           items=db.prepare("SELECT * FROM catchall_items WHERE source_id=? AND stage='source' ORDER BY position DESC LIMIT 10").all(s.id);
@@ -295,7 +295,7 @@ function openStore(filename) {
             mode = 'columns';
         } else if(body.kind==='column'||body.kind==='scan-column') {
           if(!Number.isInteger(body.column)||body.column<1||body.column>32)fail('Invalid column.');
-          const target=shelf(selectedTargetShelf()).column;
+          const target=shelf(batchTarget).column;
           mode=body.kind==='scan-column'?'final-shelves':body.column===target?'target-shelf':'final-shelves';
           if(mode==='target-shelf'&&db.prepare("SELECT 1 FROM catchall_items WHERE stage='column' AND column_no<>?").get(target))fail('Clear the other columns before the target column.');
           items=db.prepare("SELECT * FROM catchall_items WHERE stage='column' AND column_no=? ORDER BY position DESC LIMIT 10").all(body.column);
@@ -311,7 +311,7 @@ function openStore(filename) {
           items=[item];mode='tape-scan';
         } else fail('Invalid batch type');
         if(!items.length)fail('Stack is empty.');
-        const selectedTarget=selectedTargetShelf();
+        const selectedTarget=batchTarget;
         const rows=items.map(enrich).map(i=>{
           const dest=shelf(i.album?.final_shelf);
           if(body.kind==='unassigned'&&!dest)fail(`CD ${i.barcode} needs a valid final shelf before sorting.`);
@@ -326,7 +326,7 @@ function openStore(filename) {
                 : (dest?.label || 'Unassigned')
           };
         });
-        db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:body.kind,mode,sourceId:body.sourceId,column:body.column,shelf:body.shelf,rows}));
+        db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:body.kind,mode,targetShelf:batchTarget,sourceId:body.sourceId,column:body.column,shelf:body.shelf,rows}));
       } else if(body.type==='confirm') {
         if(!b)fail('No batch to confirm.');
         if(b.kind==='tape-secondary')fail('Close the old individual instructions and scan the whole shelf for pile instructions.');

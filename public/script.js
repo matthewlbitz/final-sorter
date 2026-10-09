@@ -15,29 +15,21 @@ function button(text,fn,parent=screen,quiet=false){const b=el('button',text,pare
 function input(label,value='',parent=screen){const l=el('label',label,parent), i=el('input',undefined,l);i.value=value;i.autocomplete='off';return i;}
 async function request(url,body){const r=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:undefined);const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data;}
 async function run(fn){if(busy)return;busy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);message.textContent='';try{await fn();}catch(e){message.textContent=e.message;try{state=await request('/api/state');render();}catch{message.textContent+=' — Connection lost. Reload to resume.';}}finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);}}
-async function action(type,data={}){state=await request('/api/action',{type,revision:state.revision,...data});}
+async function action(type,data={}){state=await request('/api/action',{type,revision:state.revision,...data});if(state.batch&&type!=='target')view={type:'batch'};}
 function form(fn,parent=screen){const f=el('form',undefined,parent);f.onsubmit=e=>{e.preventDefault();run(fn);};return f;}
 function submit(text,f){const b=el('button',text,f);b.type='submit';return b;}
 function go(v){view=v;render();}
 function destination(value){const m=String(value||'').match(/^(\d+)[A-Z]$/);return m?+m[1]:null;}
 function render(){
-  batchConfirm=null;searchVersion++;screen.classList.remove('compact-sort');screen.replaceChildren();document.getElementById('home').hidden=!!state.batch||view.type==='home';
-  if(state.batch)return renderBatch();
+  batchConfirm=null;searchVersion++;screen.classList.remove('compact-sort');screen.replaceChildren();document.getElementById('home').hidden=view.type==='home';
+  renderTargetPicker();
+  if(state.batch&&view.type==='batch')return renderBatch();
   if(view.type==='shelf')return renderShelf();
   if(view.type==='shelved')return renderShelved();
   if(view.type==='secondary')return renderSecondary();
   if(view.type==='source'||view.type==='column')return renderStack();
   if(view.type==='unassigned')return renderUnassigned();
-  const f=form(async()=>{
-    if(!select.value){await startScanSort();return;}
-    await action('target',{shelf:select.value});selectedTarget=state.targetShelf;scanOnly=false;predictionQueue=state.recommendations.map(r=>r.label.replace(/^Shelf /,''));render();
-  });f.className='target-picker';
-  const targetLabel=el('label','Target shelf',f),select=el('select',undefined,targetLabel);select.setAttribute('aria-label','Target shelf');
-  const blank=el('option','Scan & Sort — no target shelf',select);blank.value='';
-  for(const shelf of state.shelves){const option=el('option',shelf,select);option.value=shelf;}
-  select.value=scanOnly?'':selectedTarget||'';
-  select.onchange=()=>{if(!select.value){scanOnly=true;selectedTarget=null;render();}};
-  submit('Start',f);
+  if(state.batch)button('Resume unfinished batch',()=>go({type:'batch'}),screen,true);
 
   if(scanOnly){
     const source=state.sources.find(s=>s.id===randomSourceId&&s.status!=='complete')||state.sources.find(s=>s.label.startsWith('Scan & Sort ')&&s.status!=='complete');
@@ -88,6 +80,19 @@ function render(){
       },screen,true);
     }
   }
+}
+function renderTargetPicker(){
+  const f=form(async()=>{
+    if(!select.value){await startScanSort();return;}
+    await action('target',{shelf:select.value});selectedTarget=state.targetShelf;scanOnly=false;view={type:'home'};predictionQueue=state.recommendations.map(r=>r.label.replace(/^Shelf /,''));render();
+  });f.className='target-picker';
+  const targetLabel=el('label','Target shelf',f),select=el('select',undefined,targetLabel);select.setAttribute('aria-label','Target shelf');
+  const blank=el('option','Scan & Sort — no target shelf',select);blank.value='';
+  for(const shelf of state.shelves){const option=el('option',shelf,select);option.value=shelf;}
+  select.value=scanOnly?'':selectedTarget||'';
+  select.onchange=()=>{if(!select.value){scanOnly=true;selectedTarget=null;render();}};
+  submit('Start',f);
+
 }
 function renderScanSection(source,title,prediction,direct){
   const section=el('section');section.className='next scan-section';section.dataset.source=prediction?.label||'scan-sort';
@@ -205,7 +210,7 @@ function renderBatch(){
 
       return i.stage === 'column' && i.column_no === b.column;
     });
-    if(remaining)await action('batch',{kind:b.kind,sourceId:b.sourceId,column:b.column});
+    if(remaining)await action('batch',{kind:b.kind,sourceId:b.sourceId,column:b.column,targetShelf:b.targetShelf});
     else view={type:'home'};
     render();
   });prepareBatchConfirm(next);screen.scrollIntoView({block:'start',behavior:'instant'});next.focus({preventScroll:true});
@@ -421,7 +426,7 @@ function renderAssignedUnassigned(items) {
 }
 
 document.getElementById('home').onclick=()=>run(()=>go({type:'home'}));
-run(async()=>{state=await request('/api/state');render();});
+run(async()=>{state=await request('/api/state');if(state.batch)view={type:'batch'};render();});
 
 // Reuse the same color map as each CD's tape instructions.
 for(const [genre,color,hex] of SortingGuide.colors) {
