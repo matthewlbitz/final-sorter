@@ -1,7 +1,7 @@
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
-const {tape,tapeKey} = require('./public/sorting-guide');
+const {tape} = require('./public/sorting-guide');
 const shelf = value => {
   const m = String(value || '').trim().toUpperCase().match(/^(\d{1,2})([A-Z])$/);
   return m && +m[1] >= 1 && +m[1] <= 32 ? {label: `${+m[1]}${m[2]}`, column: +m[1], rank: +m[1]*26 + m[2].charCodeAt(0)-65} : null;
@@ -134,7 +134,13 @@ function openStore(filename) {
     // External barcode assignments are immediately recognized for location prediction, even before Refresh assignments.
     const activeByBarcode=new Map(items.filter(i=>i.stage!=='sorted').map(i=>[i.barcode,i]));
     const unknown=new Set(db.prepare('SELECT album_rowid FROM catchall_unknown_locations').all().map(i=>i.album_rowid));
-    const groups=new Map(), progress=new Map(), alreadyShelved=[];
+    const groups=new Map(), progress=new Map(), alreadyShelved=[], confirmedShelf=[];
+    const readyCounts=new Map();
+    for(const a of albums){
+      const label=shelf(a.final_shelf)?.label;
+      if(label&&String(a.barcode||'').trim()&&placed(a)&&!activeByAlbum.has(a.catalog_rowid)&&!activeByBarcode.has(String(a.barcode).trim())&&!unknown.has(a.catalog_rowid))readyCounts.set(label,(readyCounts.get(label)||0)+1);
+    }
+    const secondaryShelves=[...readyCounts].map(([shelf,count])=>({shelf,count})).sort((a,b)=>a.shelf.localeCompare(b.shelf,undefined,{numeric:true}));
     let remaining=0,unavailable=0,excludedUnassigned=0,complete=0,total=0;
     for(const a of albums) {
       if(shelf(a.final_shelf)?.label!==targetShelf)continue;
@@ -149,6 +155,9 @@ function openStore(filename) {
         const g=progress.get(key)||{key,label,stage:item.stage,sourceId:item.source_id,column:item.column_no,shelf:item.shelf_label,count:0};g.count++;progress.set(key,g);continue;
       }
       if(unknown.has(a.catalog_rowid)){remaining++;unavailable++;continue;}
+      if(placed(a)){
+        confirmedShelf.push(a);
+      }
       if(placed(a)&&handoff.primaryDone(db,a)){complete++;continue;}
       remaining++;
       if(placed(a)){alreadyShelved.push(a);continue;}
@@ -163,7 +172,7 @@ function openStore(filename) {
     const ready=alreadyShelved.length?[{key:`final-${targetShelf}`,label:`Shelf ${targetShelf}`,type:'already-shelved',count:alreadyShelved.length}]:[];
     return {revision:m.revision,targetShelf,targetColumn,shelves,start:targetShelf,end:targetShelf,total,remaining,complete,unavailable,excludedUnassigned,
       handoff:{passes:db.prepare('SELECT * FROM catchall_passes').all()},sources:sources.map(s=>({...s,count:items.filter(i=>i.source_id===s.id&&i.stage==='source').length})),items,recommendations,
-      predictedLocations:[...recommendations,...ready],inProgress:[...progress.values()],alreadyShelved,batch:m.batch?JSON.parse(m.batch):null};
+      predictedLocations:[...recommendations,...ready],inProgress:[...progress.values()],alreadyShelved,confirmedShelf,secondaryShelves,batch:m.batch?JSON.parse(m.batch):null};
   }
   function action(body) {
     let openedSourceId;
@@ -171,9 +180,12 @@ function openStore(filename) {
       const m=meta();
       if(body.revision!==m.revision)fail('State changed. Refresh and check the current stack.');
       const b=m.batch?JSON.parse(m.batch):null;
-      if(b&&body.type!=='confirm'&&body.type!=='clear-stacks')fail('Finish the displayed 10 CDs before changing stacks.');
+      if(b&&body.type!=='confirm'&&body.type!=='clear-stacks'&&body.type!=='cancel-tape')fail('Finish the displayed 10 CDs before changing stacks.');
       const source=()=>db.prepare('SELECT * FROM catchall_sources WHERE id=?').get(body.sourceId)||fail('Source not found');
-      if(body.type==='clear-stacks'){
+      if(body.type==='cancel-tape'){
+        if(!b||!['tape','tape-existing','tape-secondary'].includes(b.kind))fail('No tape instructions to close.');
+        db.prepare('UPDATE catchall_meta SET batch=NULL').run();
+      } else if(body.type==='clear-stacks'){
         // Abandon unfinished work only. Confirmed catalog placements and tape stay intact.
         const active=db.prepare("SELECT * FROM catchall_items WHERE stage<>'sorted'").all();
         for(const item of active){
@@ -191,7 +203,7 @@ function openStore(filename) {
       } else if(body.type==='target'){
         const target=shelf(body.shelf);
         if(!target||!state().shelves.includes(target.label))fail('Choose a populated final shelf.');
-        if(db.prepare("SELECT 1 FROM catchall_items WHERE stage IN ('source','column','shelf','unassigned')").get())fail('Finish the current stacks and shelf piles before changing the target shelf.');
+        if(db.prepare("SELECT 1 FROM catchall_items WHERE stage IN ('source','column','unassigned')").get())fail('Finish the current source and column stacks before changing the target shelf.');
         db.prepare('UPDATE catchall_meta SET target_shelf=?,range_start=?,range_end=?').run(target.label,target.label,target.label);
       } else if(body.type==='range'){
         fail('Choose a target shelf instead. Refresh this page.');
@@ -246,9 +258,10 @@ function openStore(filename) {
         if(!code||candidates.length!==1)fail('Scan an assigned barcode from the target shelf.');
         const a=candidates[0],target=state().targetShelf;
         if(shelf(a.final_shelf)?.label!==target||!placed(a)||handoff.primaryDone(db,a))fail('This CD is not an untaped, confirmed CD on the target shelf.');
+        if(db.prepare('SELECT 1 FROM catchall_unknown_locations WHERE album_rowid=?').get(a.catalog_rowid))fail('Confirm this CD’s physical shelf before taping.');
         const active=db.prepare("SELECT * FROM catchall_items WHERE album_rowid=? AND stage<>'sorted'").get(a.catalog_rowid);
         if(active)fail('This CD is still in a working pile.');
-        if(!tape(a.primary_genre)?.hex||(tape(a.secondary_genre)&&!tape(a.secondary_genre).hex))fail('Correct this album’s tape genres before taping.');
+        if(!tape(a.primary_genre)?.hex)fail('Correct this album’s tape genre before taping.');
         const existing=db.prepare('SELECT id FROM catchall_items WHERE album_rowid=?').get(a.catalog_rowid);
         db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:'tape-existing',shelf:target,rows:[{id:existing?.id,album_rowid:a.catalog_rowid,barcode:code,album:a,destination:target}]}));
       } else if(body.type==='batch') {
@@ -288,15 +301,14 @@ function openStore(filename) {
           items=db.prepare("SELECT * FROM catchall_items WHERE stage='column' AND column_no=? ORDER BY position DESC LIMIT 10").all(body.column);
         } else if(body.kind==='tape') {
           const label=shelf(body.shelf)?.label;if(!label)fail('Choose a shelf pile.');
-          if(db.prepare("SELECT 1 FROM catchall_items WHERE stage IN ('source','column')").get())fail('Finish sorting the source and column stacks before taping.');
-          const pile=db.prepare("SELECT * FROM catchall_items WHERE stage='shelf' AND shelf_label=? ORDER BY position DESC").all(label);
-          const first=pile[0]&&album(pile[0].album_rowid);
-          const bottom=tape(first?.primary_genre),top=tape(first?.secondary_genre);
-          if(pile.length&&(!bottom?.hex||(top&&!top.hex)))fail('The top CD needs its tape genres corrected in the catalog first.');
-          // One contiguous tape section, capped at ten for easy counting. Never reorder the pile.
-          const key=tapeKey(first);items=[];
-          for(const item of pile){if(items.length===10||tapeKey(album(item.album_rowid))!==key)break;items.push(item);}
-          mode='tape-section';
+          const code=String(body.barcode||'').trim();
+          if(!code)fail('Scan a CD from this shelf pile before taping.');
+          const matches=db.prepare('SELECT rowid AS rid FROM rainbow_albums WHERE TRIM(barcode)=?').all(code);
+          if(matches.length!==1)fail('Barcode must match exactly one catalog CD.');
+          const item=db.prepare("SELECT * FROM catchall_items WHERE stage='shelf' AND shelf_label=? AND barcode=? AND album_rowid=?").get(label,code,matches[0].rid);
+          if(!item)fail('This CD is not in the selected shelf pile.');
+          if(!tape(album(item.album_rowid)?.primary_genre)?.hex)fail('Correct this CD’s primary genre before taping.');
+          items=[item];mode='tape-scan';
         } else fail('Invalid batch type');
         if(!items.length)fail('Stack is empty.');
         const selectedTarget=selectedTargetShelf();
@@ -317,8 +329,14 @@ function openStore(filename) {
         db.prepare('UPDATE catchall_meta SET batch=?').run(JSON.stringify({kind:body.kind,mode,sourceId:body.sourceId,column:body.column,shelf:body.shelf,rows}));
       } else if(body.type==='confirm') {
         if(!b)fail('No batch to confirm.');
+        if(b.kind==='tape-secondary')fail('Close the old individual instructions and scan the whole shelf for pile instructions.');
+        if(b.kind==='tape'&&b.mode!=='tape-scan')fail('Close these old tape instructions and scan each CD before confirming.');
         for(const i of b.rows) {
           if(i.album_rowid&&String(album(i.album_rowid)?.barcode||'').trim()!==i.barcode)fail('A barcode assignment changed while this batch was open. Check the catalog before confirming.');
+          if(b.kind==='tape-existing'){
+            const current=album(i.album_rowid);
+            if(!placed(current)||db.prepare("SELECT 1 FROM catchall_items WHERE album_rowid=? AND stage<>'sorted'").get(i.album_rowid)||db.prepare('SELECT 1 FROM catchall_unknown_locations WHERE album_rowid=?').get(i.album_rowid))fail('This CD’s confirmed location changed. Check its shelf before taping.');
+          }
           if(i.placement==='set-aside') {
             if(shelf(album(i.album_rowid)?.final_shelf))fail(`CD ${i.barcode} now has a final shelf. Refresh this batch before confirming.`);
             // The station handles this physical pile outside Final Sorter.
@@ -327,7 +345,7 @@ function openStore(filename) {
             if(i.album_rowid)db.prepare('UPDATE rainbow_albums SET sorted=0,sorted_shelf=NULL,sorted_at=NULL WHERE rowid=?').run(i.album_rowid);
             continue;
           }
-          if((b.kind==='scan-sort'&&b.mode!=='columns'||b.kind==='column'||b.kind==='scan-column'||b.kind==='tape'||b.kind==='tape-existing') && shelf(album(i.album_rowid)?.final_shelf)?.label!==i.destination)fail('A final shelf changed while this batch was open. Restore its catalog destination before confirming.');
+          if((b.kind==='scan-sort'&&b.mode!=='columns'||b.kind==='column'||b.kind==='scan-column'||b.kind==='tape'||b.kind==='tape-existing'||b.kind==='tape-secondary') && shelf(album(i.album_rowid)?.final_shelf)?.label!==i.destination)fail('A final shelf changed while this batch was open. Restore its catalog destination before confirming.');
           if(b.kind==='scan-sort'&&b.mode==='columns'&&shelf(album(i.album_rowid)?.final_shelf)?.column!==i.destination)fail('A destination column changed while this batch was open. Restore it before confirming.');
           if(b.kind === 'source'||b.kind==='scan-sort'&&b.mode==='columns') {
             db.prepare(
@@ -353,11 +371,14 @@ function openStore(filename) {
           }
           else if(b.kind==='column'&&(i.placement==='shelf'||(!i.placement&&b.mode==='shelf-piles')))db.prepare("UPDATE catchall_items SET stage='shelf',shelf_label=?,position=? WHERE id=?").run(i.destination,seq(),i.id);
           else {
-            if((b.kind==='tape'||b.kind==='tape-existing')&&tapeKey(album(i.album_rowid))!==tapeKey(i.album))fail('Tape genres changed. Restore the displayed genres before confirming this section.');
+            const tapePass=b.kind==='tape-secondary'?'secondary_genre':(b.kind==='tape'||b.kind==='tape-existing')?'primary_genre':null;
+            if(tapePass&&(album(i.album_rowid)[tapePass]||'')!==(i.album[tapePass]||''))fail('Tape genres changed. Restore the displayed genre before confirming this CD.');
+
             const now=new Date().toISOString();
             const primary=b.kind==='tape'||b.kind==='tape-existing';
             const taped=false; // A primary pass does not imply a review check or secondary tape.
             if(primary)db.prepare(`INSERT INTO catchall_finishing(album_rowid,primary_at,primary_genre) VALUES(?,?,?) ON CONFLICT(album_rowid) DO UPDATE SET primary_at=excluded.primary_at,primary_genre=excluded.primary_genre`).run(i.album_rowid,now,album(i.album_rowid).primary_genre||'');
+
             captureBaseline(i.album_rowid);
             db.prepare('DELETE FROM catchall_unknown_locations WHERE album_rowid=?').run(i.album_rowid);
             db.prepare('UPDATE rainbow_albums SET sorted=1,sorted_shelf=?,sorted_at=?,taped=CASE WHEN ? THEN 1 ELSE taped END,taped_at=CASE WHEN ? THEN ? ELSE taped_at END WHERE rowid=?').run(i.destination,now,Number(taped),Number(taped),now,i.album_rowid);
@@ -412,7 +433,7 @@ function openStore(filename) {
             markScanned(matches[0].rid,new Date().toISOString());
             matched++;
           }
-        } 
+        }
       } else if(body.type==='assign') {
         const i=db.prepare("SELECT * FROM catchall_items WHERE id=? AND stage='unassigned'").get(body.itemId)||fail('CD is no longer unassigned.');
         if(i.album_rowid)fail('This barcode already has an album. Correct its final shelf in the catalog.');
@@ -440,10 +461,37 @@ function openStore(filename) {
       return result;
     }).immediate();
   }
+  function secondaryPlan(body){
+    const target=shelf(body.shelf)?.label;
+    if(!target)fail('Choose a valid shelf.');
+    if(!Array.isArray(body.barcodes)||!body.barcodes.length||body.barcodes.length>2000)fail('Scan the CDs from this shelf first (up to 2000).');
+    const seen=new Set(),rows=[];
+    const lookup=db.prepare('SELECT rowid AS catalog_rowid,* FROM rainbow_albums WHERE TRIM(barcode)=?');
+    for(const value of body.barcodes){
+      const barcode=String(value||'').trim();
+      if(!barcode||barcode.length>128)fail('Scan a valid barcode.');
+      if(seen.has(barcode))fail(`Barcode ${barcode} was scanned twice. Remove the duplicate scan.`);
+      seen.add(barcode);
+      const matches=lookup.all(barcode);
+      const album=matches.length===1?matches[0]:null;
+      const belongs=album&&shelf(album.final_shelf)?.label===target;
+      const genre=belongs?String(album.secondary_genre||'').trim():null;
+      rows.push({barcode,album,genre,belongs:!!belongs,issue:matches.length===0?'Barcode not found':matches.length>1?'Barcode matches multiple albums':!belongs?'Different or missing final shelf':null});
+    }
+    const genres=[...new Set(rows.filter(r=>r.belongs&&r.genre).map(r=>r.genre))].sort((a,b)=>a.localeCompare(b));
+    const piles=genres.map((genre,index)=>({number:index+1,genre,kind:'genre',instruction:tape(genre),count:0}));
+    piles.push({number:piles.length+1,kind:'wrong-shelf',genre:null,instruction:null,count:0});
+    piles.push({number:piles.length+1,kind:'no-secondary',genre:null,instruction:null,count:0});
+    for(const row of rows){
+      const pile=piles.find(p=>!row.belongs?p.kind==='wrong-shelf':row.genre?p.kind==='genre'&&p.genre===row.genre:p.kind==='no-secondary');
+      row.pile=pile.number;pile.count++;
+    }
+    return {shelf:target,rows:rows.reverse(),piles,scanned:rows.length};
+  }
   function search(q) {
     const terms=String(q||'').trim().toLowerCase().split(/\s+/).filter(Boolean);if(!terms.length)return [];
     return db.prepare("SELECT rowid AS catalog_rowid,id,artist,title,final_shelf FROM rainbow_albums WHERE COALESCE(TRIM(barcode),'')='' AND rowid NOT IN (SELECT album_rowid FROM catchall_items WHERE album_rowid IS NOT NULL)").all().filter(a=>terms.every(t=>`${a.artist} ${a.title}`.toLowerCase().includes(t))).slice(0,40);
   }
-  return {db,state,action,search,report:()=>db.transaction(()=>handoff.markdown(db))(),reportHtml:()=>db.transaction(()=>require('./report-html').html(db))()};
+  return {db,state,action,search,secondaryPlan,report:()=>db.transaction(()=>handoff.markdown(db))(),reportHtml:()=>db.transaction(()=>require('./report-html').html(db))()};
 }
 module.exports={openStore,shelf,estimatedLocation};

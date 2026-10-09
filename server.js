@@ -10,6 +10,7 @@ function createApp(filename = process.env.KTRU_DB || path.join(__dirname, '..', 
   app.get('/api/report.html', (_req,res)=>res.attachment(`ktru-station-${new Date().toISOString().replace(/[:.]/g,'-')}.html`).type('html').send(store.reportHtml()));
   app.get('/api/report.md', (_req,res)=>res.type('text/markdown').attachment(`ktru-station-${new Date().toISOString().replace(/[:.]/g,'-')}.md`).send(store.report()));
   app.get('/api/search', (req,res)=>res.json(store.search(req.query.q)));
+  app.post('/api/secondary-plan', (req,res)=>{try{res.json(store.secondaryPlan(req.body));}catch(e){res.status(409).json({error:e.message});}});
   app.post('/api/action', (req,res)=>{try{res.json(store.action(req.body));}catch(e){res.status(409).json({error:e.message});}});
   app.get('/api/lookup/:barcode', (req,res)=>{
     const album=store.db.prepare('SELECT * FROM rainbow_albums WHERE barcode=? LIMIT 1').get(req.params.barcode.trim());

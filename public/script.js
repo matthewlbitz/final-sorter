@@ -2,6 +2,12 @@
    each scan/placement goes on top; display the newest ten top-to-bottom. */
 const screen=document.getElementById('screen'), message=document.getElementById('message');
 let batchConfirm=null, enterHeld=false;
+let secondarySession=JSON.parse(sessionStorage.getItem('secondary-piles')||'null');
+function saveSecondary(){sessionStorage.setItem('secondary-piles',JSON.stringify(secondarySession));}
+function openSecondary(shelf){
+  if(!secondarySession||secondarySession.shelf!==shelf){secondarySession={shelf,barcodes:[],plan:null,stage:'scan'};saveSecondary();}
+  go({type:'secondary'});
+}
 let selectedTarget=null, scanOnly=true, randomSourceId=null, predictionQueue=[];
 let state, view={type:'home'}, busy=false, searchVersion=0;
 const el=(tag,text,parent=screen)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;parent.append(n);return n;};
@@ -19,6 +25,7 @@ function render(){
   if(state.batch)return renderBatch();
   if(view.type==='shelf')return renderShelf();
   if(view.type==='shelved')return renderShelved();
+  if(view.type==='secondary')return renderSecondary();
   if(view.type==='source'||view.type==='column')return renderStack();
   if(view.type==='unassigned')return renderUnassigned();
   const f=form(async()=>{
@@ -60,6 +67,11 @@ function render(){
       const here=el('section');here.className='next';el('h2',`Already on ${state.targetShelf} · ${state.alreadyShelved.length} need tape`,here);
       button('Tape CDs already here',()=>go({type:'shelved'}),here);
     }
+  }
+  if(selectedTarget&&!scanOnly&&state.confirmedShelf.length){
+    const here=el('section');here.className='next';
+    el('h2',`${state.confirmedShelf.length} CDs confirmed on shelf ${state.targetShelf} · ${state.total} catalog CDs assigned here`,here);
+    button('Scan shelf for secondary tape piles',()=>openSecondary(state.targetShelf),here);
   }
   const columns=[...new Set(state.items.filter(i=>i.stage==='column').map(i=>i.column_no))].sort((a,b)=>(a===state.targetColumn)-(b===state.targetColumn)||b-a);
   if(columns.length){el('h2','Column stacks');const wrap=el('div');wrap.className='columns';for(const c of columns)button(`${c} · ${state.items.filter(i=>i.stage==='column'&&i.column_no===c).length}`,()=>go({type:'column',column:c}),wrap,true);}
@@ -114,12 +126,10 @@ function renderShelf(){
   const items=state.items.filter(i=>i.stage==='shelf'&&i.shelf_label===view.shelf);
   el('h2',`Shelf ${view.shelf} · ${items.length} CDs`);
   if(!items.length){button('Continue',()=>go({type:'home'})).focus();return;}
-  el('p','Keep the pile in order. These are the tape sections from top to bottom.');
-  const sections=SortingGuide.tapeSections(items);
-  for(const [index,section] of sections.entries()){
-    const card=el('div');card.className='tape-section-card';el('strong',`Section ${index+1} · ${section.count} CDs`,card);renderTape(section.album,card);
-  }
-  button('Tape the top section',async()=>{await action('batch',{kind:'tape',shelf:view.shelf});render();}).focus({preventScroll:true});
+  el('p','Scan any CD from this shelf pile to confirm it belongs here and show its primary genre.');
+  const f=form(async()=>{await action('batch',{kind:'tape',shelf:view.shelf,barcode:barcode.value});render();});
+  const barcode=input('Barcode from this shelf pile','',f);submit('Show primary tape',f);barcode.focus();
+
 }
 function renderStack(){
   const source=view.type==='source';
@@ -141,7 +151,7 @@ function renderStack(){
 }
 function renderBatch(){
   const b=state.batch;
-  if(b.kind==='tape'||b.kind==='tape-existing')return renderTapeBatch(b);
+  if(b.kind==='tape'||b.kind==='tape-existing'||b.kind==='tape-secondary')return renderTapeBatch(b);
   const columns=b.kind==='source'||b.kind==='unassigned'||b.kind==='scan-sort'&&b.mode==='columns';
   screen.classList.add('compact-sort');
   if(b.kind==='scan-sort'){el('h2',columns?'Pass 1 · stack → columns':'Scan & Sort → final shelves');}
@@ -201,20 +211,104 @@ function renderBatch(){
   });prepareBatchConfirm(next);screen.scrollIntoView({block:'start',behavior:'instant'});next.focus({preventScroll:true});
 }
 function renderTapeBatch(b){
+  if(b.kind==='tape'&&b.mode!=='tape-scan'){
+    el('p','Scan each CD to confirm its shelf before primary taping.');
+    button('Start scanning this shelf',async()=>{await action('cancel-tape');view={type:'shelf',shelf:b.shelf};render();});return;
+  }
+  if(b.kind==='tape-secondary'){
+    el('p','Secondary taping now uses the whole shelf.');
+    button('Scan whole shelf',async()=>{await action('cancel-tape');openSecondary(b.shelf);});return;
+  }
+  const album=b.rows[0].album;
   el('h2',`Primary tape · shelf ${b.shelf}`);
   const card=el('section');card.className='next taping-instruction';
-  el('h3',b.kind==='tape-existing'?'Tape this CD':`Take the top ${b.rows.length} CDs`,card);renderTape(b.rows[0].album,card,true);
-  el('p',`Apply the bottom (primary) tape. Then place these CDs on final shelf ${b.shelf}.`,card);
-  const list=el('ol');list.className='taping-albums';
-  for(const i of b.rows)el('li',`${i.album.artist} — ${i.album.title} · ${i.barcode}`,list);
-  const next=button(`Primary taped & placed ${b.rows.length} CDs on ${b.shelf} (Enter)`,async()=>{
+  el('h3',`${album.artist} — ${album.title}`,card);el('p',b.rows[0].barcode,card);
+  const genre=album.primary_genre;
+  const instruction=SortingGuide.tape(genre);
+  el('strong',`Primary genre: ${genre||'None'}`,card);
+  if(instruction){
+    const line=el('div',undefined,card);line.className='tape-line';
+    if(instruction.hex){const swatch=el('span',undefined,line);swatch.className='swatch';swatch.style.backgroundColor=instruction.hex;}
+    el('span',`${instruction.color} tape · bottom`,line);
+  }else el('p','Check the primary genre before taping.',card);
+  el('p',`Return this CD to shelf ${b.shelf} after taping.`,card);
+  const next=button(`Primary taped & placed on ${b.shelf} (Enter)`,async()=>{
     await action('confirm');
-    if(b.kind==='tape-existing'){view={type:'shelved'};render();return;}
-    view={type:'shelf',shelf:b.shelf};
-    if(state.items.some(i=>i.stage==='shelf'&&i.shelf_label===b.shelf))await action('batch',{kind:'tape',shelf:b.shelf});
-    else view={type:'home'};
+    view=b.kind==='tape-existing'?{type:'shelved'}:{type:'shelf',shelf:b.shelf};
     render();
-  });prepareBatchConfirm(next);screen.scrollIntoView({block:'start',behavior:'instant'});next.focus({preventScroll:true});
+  });prepareBatchConfirm(next);
+  button('Back to scanning',async()=>{await action('cancel-tape');view=b.kind==='tape-existing'?{type:'shelved'}:{type:'shelf',shelf:b.shelf};render();},screen,true);
+  next.focus({preventScroll:true});
+}
+function renderSecondary(){
+  if(!secondarySession){openSecondary(state.targetShelf);return;}
+  const session=secondarySession,shelf=session.shelf;
+  el('h2',`Secondary tape piles · shelf ${shelf}`);
+  const expected=state.secondaryShelves.find(s=>s.shelf===shelf)?.count||0;
+  if(session.stage==='scan'){
+    el('p',`${expected} CDs placed here · ${session.barcodes.length} scanned.`);
+    el('p','Scan every CD, placing each on top of one stack. Finish scanning before sorting into piles.');
+    const f=form(async()=>{
+      const code=barcode.value.trim();if(!code)throw Error('Scan a barcode.');
+      if(session.barcodes.includes(code))throw Error('This barcode was already scanned.');
+      if(code.length>128||session.barcodes.length>=2000)throw Error('Scan a valid barcode (maximum 2000 CDs per shelf).');
+      session.barcodes.push(code);session.plan=null;saveSecondary();render();
+    });
+    const barcode=input('Barcode from this shelf','',f);submit('Add scan',f);
+    if(session.barcodes.length){
+      el('p',`Last scan: ${session.barcodes.at(-1)}`);
+      button('Remove last scan',()=>{session.barcodes.pop();saveSecondary();render();},screen,true);
+      button('Finish scanning · calculate piles',async()=>{session.plan=await request('/api/secondary-plan',{shelf,barcodes:session.barcodes});session.stage='sort';session.offset=0;saveSecondary();render();});
+    }
+    barcode.focus();return;
+  }
+  const plan=session.plan;
+  if(session.stage==='sort'){
+    screen.classList.add('compact-sort');
+    const offset=session.offset||0,rows=plan.rows.slice(offset,offset+10);
+    el('p',`${plan.scanned} CDs · ${plan.piles.length} piles · CDs ${offset+1}–${offset+rows.length}. Top CD first: place each on its numbered pile.`);
+    const output=el('div');output.className='batch-output';
+    for(let start=0;start<rows.length;){
+      let end=start+1;while(end<rows.length&&rows[end].pile===rows[start].pile)end++;
+      const count=end-start,pile=plan.piles.find(p=>p.number===rows[start].pile);
+      const wrap=el('div',undefined,output);wrap.className=count>1?'shelf-run':'single-run';
+      if(count>1)el('div',`${count} CDs → pile ${pile.number}`,wrap).className='run-label';
+      for(let index=start;index<end;index++){
+        const item=rows[index],row=el('div',undefined,wrap);row.className='batch-row';
+        el('div',String(index+1).padStart(2,'0'),row).className='batch-number';
+        const dest=el('div',undefined,row);dest.className='batch-shelf';
+        el('span','PILE',dest).className='eyebrow';el('strong',String(pile.number),dest);
+        const detail=el('div',undefined,row);detail.className='batch-detail';
+        el('strong',item.album?`${item.album.artist||''} — ${item.album.title||''}`:'Unassigned',detail);
+        el('small',`${item.barcode} · ${pile.kind==='genre'?pile.genre:pile.kind==='wrong-shelf'?'Wrong shelf / check barcode':'No secondary genre'}`,detail);
+      }
+      start=end;
+    }
+    const next=button(`Placed these ${rows.length} CDs — continue (Enter)`,()=>{
+      session.offset=offset+rows.length;
+      if(session.offset>=plan.rows.length)session.stage='tape';
+      saveSecondary();render();
+    });prepareBatchConfirm(next);
+    if(!offset)button('Back to scanning',()=>{session.stage='scan';saveSecondary();render();},screen,true);
+    screen.scrollIntoView({block:'start',behavior:'instant'});next.focus({preventScroll:true});return;
+  }
+  for(const pile of plan.piles){
+    const card=el('section');card.className='next';el('h3',`Pile ${pile.number} · ${pile.count} CDs`,card);
+    if(pile.kind==='wrong-shelf'){
+      el('p','Do not tape this pile. Set these CDs aside and check their final shelf or barcode in Shelf Lookup.',card);
+    }else if(pile.kind==='no-secondary')el('p',`No secondary genre: no top tape. Return this pile to ${shelf}.`,card);
+    else{
+      el('strong',pile.genre,card);
+      if(pile.instruction?.hex){
+        const line=el('div',undefined,card);line.className='tape-line';
+        const swatch=el('span',undefined,line);swatch.className='swatch';swatch.style.backgroundColor=pile.instruction.hex;
+        el('span',`${pile.instruction.color} tape · top`,line);el('p',`Tape this pile and return it to ${shelf}.`,card);
+      }else el('p','No tape instruction found for this genre. Set this pile aside and check the station reference.',card);
+    }
+    if(!pile.count)el('p','Empty pile · nothing to do.',card);
+  }
+  button('Done · back to shelves',()=>{secondarySession=null;sessionStorage.removeItem('secondary-piles');go({type:'home'});});
+  button('Back to pile sorting',()=>{session.stage='sort';session.offset=0;saveSecondary();render();},screen,true);
 }
 function renderShelved(){
   el('h2',`Already on shelf ${state.targetShelf}`);
@@ -355,7 +449,7 @@ function prepareBatchConfirm(button){
   };
 }
 document.addEventListener('keydown',event=>{
-  if(event.key!=='Enter'||!state?.batch||!batchConfirm||event.isComposing||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
+  if(event.key!=='Enter'||!batchConfirm||event.isComposing||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
   if(event.target.closest?.('input,select,textarea,[contenteditable="true"]'))return;
   event.preventDefault();
   if(event.repeat||enterHeld)return;
