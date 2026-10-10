@@ -49,26 +49,26 @@ function render(){
       const label=pending[0],source=state.sources.find(s=>s.label===label&&s.status==='scanning');
       renderScanSection(source,'Shelf '+label,{label,count:labels.get(label)||0},false);
     }else el('p','Finished scanning all predicted shelves. Sort the saved stacks below.');
-    const saved=state.sources.filter(s=>s.status==='saved'&&!s.label.startsWith('Scan & Sort '));
+    const saved=state.sources.filter(s=>s.status==='saved'&&!s.label.startsWith('Scan & Sort ')).sort((a,b)=>a.id-b.id);
     if(saved.length){
       const work=el('section');work.className='next';el('h2','Saved stacks',work);
       for(const source of saved)button(`Sort shelf ${source.label} · ${source.count} CDs`,async()=>{await action('batch',{kind:'source',sourceId:source.id});render();},work,true);
     }
     if(state.unavailable)el('p',`${state.unavailable} CDs have unknown source locations.`);
-    if(state.alreadyShelved.length){
-      const here=el('section');here.className='next';el('h2',`Already on ${state.targetShelf} · ${state.alreadyShelved.length} need tape`,here);
-      button('Tape CDs already here',()=>go({type:'shelved'}),here);
-    }
   }
-  if(selectedTarget&&!scanOnly&&state.confirmedShelf.length){
-    const here=el('section');here.className='next';
-    el('h2',`${state.confirmedShelf.length} CDs confirmed on shelf ${state.targetShelf} · ${state.total} catalog CDs assigned here`,here);
-    button('Scan shelf for secondary tape piles',()=>openSecondary(state.targetShelf),here);
+  if(selectedTarget&&!scanOnly){
+    const waiting=state.items.filter(i=>i.stage==='shelf'&&i.shelf_label===state.targetShelf).length;
+    const primary=el('section');primary.className='next';
+    el('h2',`Primary tape · shelf ${state.targetShelf}`,primary);
+    el('p',`${waiting} CDs in the primary tape pile · ${state.alreadyShelved.length} placed CDs still need primary tape`,primary);
+    button('Scan for primary tape',()=>go({type:'shelf',shelf:state.targetShelf}),primary);
+    const secondary=el('section');secondary.className='next';
+    el('h2',`Secondary tape · shelf ${state.targetShelf}`,secondary);
+    el('p',`${state.confirmedShelf.length} CDs placed here · ${state.total} catalog CDs assigned here`,secondary);
+    button('Scan shelf for secondary tape piles',()=>openSecondary(state.targetShelf),secondary);
   }
-  const columns=[...new Set(state.items.filter(i=>i.stage==='column').map(i=>i.column_no))].sort((a,b)=>(a===state.targetColumn)-(b===state.targetColumn)||b-a);
-  if(columns.length){el('h2','Column stacks');const wrap=el('div');wrap.className='columns';for(const c of columns)button(`${c} · ${state.items.filter(i=>i.stage==='column'&&i.column_no===c).length}`,()=>go({type:'column',column:c}),wrap,true);}
-  const shelves=[...new Set(state.items.filter(i=>i.stage==='shelf').map(i=>i.shelf_label))];
-  if(shelves.length){el('h2','Shelf piles · ready to tape');for(const shelf of shelves)button(shelf,()=>go({type:'shelf',shelf}),screen,true);}
+  const columns=[...new Set(state.items.filter(i=>i.stage==='column').map(i=>i.column_no))].sort((a,b)=>a-b);
+  if(columns.length){el('h2','Column stacks');const wrap=el('div');wrap.className='columns';for(const c of columns)button(`col ${c} · ${state.items.filter(i=>i.stage==='column'&&i.column_no===c).length}`,()=>go({type:'column',column:c}),wrap,true);}
   const unknown=state.items.filter(i=>i.stage==='unassigned').length;
   if(unknown)button(`Set aside · ${unknown}`,()=>go({type:'unassigned'}),screen,true);
   if(scanOnly&&state.sources.some(s=>s.status!=='complete'&&!s.label.startsWith('Scan & Sort ')))button(`Resume target shelf ${state.targetShelf}`,()=>{selectedTarget=state.targetShelf;scanOnly=false;predictionQueue=[];render();},screen,true);
@@ -129,12 +129,18 @@ function renderScanSection(source,title,prediction,direct){
 
 function renderShelf(){
   const items=state.items.filter(i=>i.stage==='shelf'&&i.shelf_label===view.shelf);
-  el('h2',`Shelf ${view.shelf} · ${items.length} CDs`);
-  if(!items.length){button('Continue',()=>go({type:'home'})).focus();return;}
-  el('p','Scan any CD from this shelf pile to confirm it belongs here and show its primary genre.');
-  const f=form(async()=>{await action('batch',{kind:'tape',shelf:view.shelf,barcode:barcode.value});render();});
-  const barcode=input('Barcode from this shelf pile','',f);submit('Show primary tape',f);barcode.focus();
-
+  const placed=view.shelf===state.targetShelf?state.alreadyShelved:[];
+  el('h2',`Primary tape · shelf ${view.shelf}`);
+  el('p',`${items.length} CDs in the tape pile · ${placed.length} placed CDs need primary tape.`);
+  if(!items.length&&!placed.length){el('p','No CDs currently need primary tape here.');button('Continue',()=>go({type:'home'})).focus();return;}
+  el('p','Scan any CD from this shelf or its primary tape pile to verify it belongs here and show its primary genre.');
+  const f=form(async()=>{
+    const code=barcode.value.trim();
+    if(items.some(i=>i.barcode===code))await action('batch',{kind:'tape',shelf:view.shelf,barcode:code});
+    else await action('tape-existing',{barcode:code});
+    render();
+  });
+  const barcode=input('Barcode from this shelf or tape pile','',f);submit('Show primary tape',f);barcode.focus();
 }
 function renderStack(){
   const source=view.type==='source';
@@ -150,7 +156,6 @@ function renderStack(){
   }
   const directColumn=!source&&items.every(i=>state.sources.find(s=>s.id===i.source_id)?.label.startsWith('Scan & Sort '));
   const target=!directColumn&&!source&&view.column===state.targetColumn;
-  if(target&&state.items.some(i=>i.stage==='column'&&i.column_no!==state.targetColumn)){el('p','Clear the other column stacks first.');button('Back to columns',()=>go({type:'home'}));return;}
   el('p',source?'Pick up from the top. Place each CD on top of its destination pile.':target?`Put CDs for ${state.targetShelf} on its tape pile. Place the rest in final shelves.`:'Place each CD in its final shelf. No taping in this step.');
   button(source?'Sort into columns':target?'Sort target pile & final shelves':'Sort into final shelves',async()=>{await action('batch',{kind:source?'source':directColumn?'scan-column':'column',sourceId:view.id,column:view.column});render();}).focus();
 }
@@ -239,10 +244,10 @@ function renderTapeBatch(b){
   el('p',`Return this CD to shelf ${b.shelf} after taping.`,card);
   const next=button(`Primary taped & placed on ${b.shelf} (Enter)`,async()=>{
     await action('confirm');
-    view=b.kind==='tape-existing'?{type:'shelved'}:{type:'shelf',shelf:b.shelf};
+    view={type:'shelf',shelf:b.shelf};
     render();
   });prepareBatchConfirm(next);
-  button('Back to scanning',async()=>{await action('cancel-tape');view=b.kind==='tape-existing'?{type:'shelved'}:{type:'shelf',shelf:b.shelf};render();},screen,true);
+  button('Back to scanning',async()=>{await action('cancel-tape');view={type:'shelf',shelf:b.shelf};render();},screen,true);
   next.focus({preventScroll:true});
 }
 function renderSecondary(){

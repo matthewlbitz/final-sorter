@@ -297,7 +297,6 @@ function openStore(filename) {
           if(!Number.isInteger(body.column)||body.column<1||body.column>32)fail('Invalid column.');
           const target=shelf(batchTarget).column;
           mode=body.kind==='scan-column'?'final-shelves':body.column===target?'target-shelf':'final-shelves';
-          if(mode==='target-shelf'&&db.prepare("SELECT 1 FROM catchall_items WHERE stage='column' AND column_no<>?").get(target))fail('Clear the other columns before the target column.');
           items=db.prepare("SELECT * FROM catchall_items WHERE stage='column' AND column_no=? ORDER BY position DESC LIMIT 10").all(body.column);
         } else if(body.kind==='tape') {
           const label=shelf(body.shelf)?.label;if(!label)fail('Choose a shelf pile.');
