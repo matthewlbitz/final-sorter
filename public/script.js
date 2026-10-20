@@ -4,8 +4,8 @@ const screen=document.getElementById('screen'), message=document.getElementById(
 let batchConfirm=null, enterHeld=false;
 let secondarySession=JSON.parse(sessionStorage.getItem('secondary-piles')||'null');
 function saveSecondary(){sessionStorage.setItem('secondary-piles',JSON.stringify(secondarySession));}
-function openSecondary(shelf){
-  if(!secondarySession||secondarySession.shelf!==shelf){secondarySession={shelf,barcodes:[],plan:null,stage:'scan'};saveSecondary();}
+function openSecondary(shelf,pass="secondary"){
+  if(!secondarySession||secondarySession.shelf!==shelf||(secondarySession.pass||"secondary")!==pass){secondarySession={shelf,pass,barcodes:[],plan:null,stage:'scan'};saveSecondary();}
   go({type:'secondary'});
 }
 let selectedTarget=null, scanOnly=true, randomSourceId=null, predictionQueue=[];
@@ -61,7 +61,7 @@ function render(){
     const primary=el('section');primary.className='next';
     el('h2',`Primary tape · shelf ${state.targetShelf}`,primary);
     el('p',`${waiting} CDs in the primary tape pile · ${state.alreadyShelved.length} placed CDs still need primary tape`,primary);
-    button('Scan for primary tape',()=>go({type:'shelf',shelf:state.targetShelf}),primary);
+    button('Scan for primary tape',()=>openSecondary(state.targetShelf,'primary'),primary);
     const secondary=el('section');secondary.className='next';
     el('h2',`Secondary tape · shelf ${state.targetShelf}`,secondary);
     el('p',`${state.confirmedShelf.length} CDs placed here · ${state.total} catalog CDs assigned here`,secondary);
@@ -127,21 +127,7 @@ function renderScanSection(source,title,prediction,direct){
   }
 }
 
-function renderShelf(){
-  const items=state.items.filter(i=>i.stage==='shelf'&&i.shelf_label===view.shelf);
-  const placed=view.shelf===state.targetShelf?state.alreadyShelved:[];
-  el('h2',`Primary tape · shelf ${view.shelf}`);
-  el('p',`${items.length} CDs in the tape pile · ${placed.length} placed CDs need primary tape.`);
-  if(!items.length&&!placed.length){el('p','No CDs currently need primary tape here.');button('Continue',()=>go({type:'home'})).focus();return;}
-  el('p','Scan any CD from this shelf or its primary tape pile to verify it belongs here and show its primary genre.');
-  const f=form(async()=>{
-    const code=barcode.value.trim();
-    if(items.some(i=>i.barcode===code))await action('batch',{kind:'tape',shelf:view.shelf,barcode:code});
-    else await action('tape-existing',{barcode:code});
-    render();
-  });
-  const barcode=input('Barcode from this shelf or tape pile','',f);submit('Show primary tape',f);barcode.focus();
-}
+function renderShelf(){openSecondary(view.shelf,'primary');}
 function renderStack(){
   const source=view.type==='source';
   const items=state.items.filter(i=>source?i.stage==='source'&&i.source_id===view.id:i.stage==='column'&&i.column_no===view.column);
@@ -252,11 +238,11 @@ function renderTapeBatch(b){
 }
 function renderSecondary(){
   if(!secondarySession){openSecondary(state.targetShelf);return;}
-  const session=secondarySession,shelf=session.shelf;
-  el('h2',`Secondary tape piles · shelf ${shelf}`);
+  const session=secondarySession,shelf=session.shelf,pass=session.pass||"secondary",primary=pass==="primary",title=primary?"Primary":"Secondary";
+  el('h2',`${title} tape piles · shelf ${shelf}`);
   const expected=state.secondaryShelves.find(s=>s.shelf===shelf)?.count||0;
   if(session.stage==='scan'){
-    el('p',`${expected} CDs placed here · ${session.barcodes.length} scanned.`);
+    el('p',`${expected} CDs recorded here · ${session.barcodes.length} scanned. Scan the CDs physically present even when the recorded count is zero.`);
     el('p','Scan every CD, placing each on top of one stack. Finish scanning before sorting into piles.');
     const f=form(async()=>{
       const code=barcode.value.trim();if(!code)throw Error('Scan a barcode.');
@@ -268,7 +254,7 @@ function renderSecondary(){
     if(session.barcodes.length){
       el('p',`Last scan: ${session.barcodes.at(-1)}`);
       button('Remove last scan',()=>{session.barcodes.pop();saveSecondary();render();},screen,true);
-      button('Finish scanning · calculate piles',async()=>{session.plan=await request('/api/secondary-plan',{shelf,barcodes:session.barcodes});session.stage='sort';session.offset=0;saveSecondary();render();});
+      button('Finish scanning · calculate piles',async()=>{session.plan=await request('/api/secondary-plan',{shelf,barcodes:session.barcodes,pass});session.stage='sort';session.offset=0;saveSecondary();render();});
     }
     barcode.focus();return;
   }
@@ -290,7 +276,7 @@ function renderSecondary(){
         el('span','PILE',dest).className='eyebrow';el('strong',String(pile.number),dest);
         const detail=el('div',undefined,row);detail.className='batch-detail';
         el('strong',item.album?`${item.album.artist||''} — ${item.album.title||''}`:'Unassigned',detail);
-        el('small',`${item.barcode} · ${pile.kind==='genre'?pile.genre:pile.kind==='wrong-shelf'?'Wrong shelf / check barcode':'No secondary genre'}`,detail);
+        el('small',`${item.barcode} · ${pile.kind==='genre'?pile.genre:pile.kind==='wrong-shelf'?'Wrong shelf / check barcode':primary?'Missing primary genre — review':'No secondary genre'}`,detail);
       }
       start=end;
     }
@@ -306,13 +292,13 @@ function renderSecondary(){
     const card=el('section');card.className='next';el('h3',`Pile ${pile.number} · ${pile.count} CDs`,card);
     if(pile.kind==='wrong-shelf'){
       el('p','Do not tape this pile. Set these CDs aside and check their final shelf or barcode in Shelf Lookup.',card);
-    }else if(pile.kind==='no-secondary')el('p',`No secondary genre: no top tape. Return this pile to ${shelf}.`,card);
+    }else if(pile.kind==='no-secondary')el('p',primary?'Missing primary genre: set this pile aside for review.':`No secondary genre: no top tape. Return this pile to ${shelf}.`,card);
     else{
       el('strong',pile.genre,card);
       if(pile.instruction?.hex){
         const line=el('div',undefined,card);line.className='tape-line';
         const swatch=el('span',undefined,line);swatch.className='swatch';swatch.style.backgroundColor=pile.instruction.hex;
-        el('span',`${pile.instruction.color} tape · top`,line);el('p',`Tape this pile and return it to ${shelf}.`,card);
+        el('span',`${pile.instruction.color} tape · ${primary?'bottom':'top'}`,line);el('p',`Tape this pile and return it to ${shelf}.`,card);
       }else el('p','No tape instruction found for this genre. Set this pile aside and check the station reference.',card);
     }
     if(!pile.count)el('p','Empty pile · nothing to do.',card);
@@ -470,3 +456,4 @@ document.addEventListener('keyup',event=>{
   if(event.key==='Enter'&&enterHeld){event.preventDefault();enterHeld=false;}
 });
 window.addEventListener('blur',()=>{enterHeld=false;});
+

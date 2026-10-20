@@ -461,6 +461,8 @@ function openStore(filename) {
     }).immediate();
   }
   function secondaryPlan(body){
+    const pass=body.pass||'secondary';
+    if(!['primary','secondary'].includes(pass))fail('Choose primary or secondary tape.');
     const target=shelf(body.shelf)?.label;
     if(!target)fail('Choose a valid shelf.');
     if(!Array.isArray(body.barcodes)||!body.barcodes.length||body.barcodes.length>2000)fail('Scan the CDs from this shelf first (up to 2000).');
@@ -474,7 +476,7 @@ function openStore(filename) {
       const matches=lookup.all(barcode);
       const album=matches.length===1?matches[0]:null;
       const belongs=album&&shelf(album.final_shelf)?.label===target;
-      const genre=belongs?String(album.secondary_genre||'').trim():null;
+      const genre=belongs?String(album[pass+'_genre']||'').trim():null;
       rows.push({barcode,album,genre,belongs:!!belongs,issue:matches.length===0?'Barcode not found':matches.length>1?'Barcode matches multiple albums':!belongs?'Different or missing final shelf':null});
     }
     const genres=[...new Set(rows.filter(r=>r.belongs&&r.genre).map(r=>r.genre))].sort((a,b)=>a.localeCompare(b));
